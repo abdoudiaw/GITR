@@ -1,3 +1,4 @@
+
 #ifndef _SURFACES_
 #define _SURFACES_
 
@@ -19,14 +20,13 @@
 #endif
 
 #include <random>
+#include <string>
 
 #if USE_DOUBLE
 typedef double gitr_precision;
 #else
 typedef float gitr_precision;
 #endif
-
-//CUDA_CALLABLE_MEMBER
 
 class Surfaces : public ManagedAllocation {
 public: 
@@ -39,6 +39,7 @@ public:
   gitr_precision A;
   gitr_precision dE;
   gitr_precision dA;
+  gitr_precision bindingEnergy;
   sim::Array<gitr_precision> sumParticlesStrike;
   sim::Array<gitr_precision> gridE;
   sim::Array<gitr_precision> gridA;
@@ -50,10 +51,12 @@ public:
   sim::Array<gitr_precision> energyDistribution;
   sim::Array<gitr_precision> sputtDistribution;
   sim::Array<gitr_precision> reflDistribution;
+  std::string materialName;
 
   CUDA_CALLABLE_MEMBER
-  
-  void setSurface(int nE, gitr_precision E0, gitr_precision E, int nA, gitr_precision A0, gitr_precision A) {
+  void setSurface(int nE, gitr_precision E0, gitr_precision E, int nA, gitr_precision A0, gitr_precision A, gitr_precision bindingEnergy, const std::string& materialName) {
+    this->bindingEnergy = bindingEnergy;
+    this->materialName = materialName;
     this->nE = nE;
     this->E0 = E0;
     this->E = E;
@@ -72,12 +75,12 @@ public:
   };
 
   CUDA_CALLABLE_MEMBER
-  Surfaces(std::size_t nS,std::size_t nE, std::size_t nA) :
-   sumParticlesStrike{nS,0}, gridE{nE,0.0}, gridA{nA,0.0},
-   sumWeightStrike{nS,0.0}, grossDeposition{nS,0.0},
-    grossErosion{nS,0.0}, aveSputtYld{nS,0.0}, sputtYldCount{nS,0},
-   energyDistribution{nS*nE*nA,0.0},sputtDistribution{nS*nE*nA,0.0},
-   reflDistribution{nS*nE*nA,0.0} {};   
+  Surfaces(std::size_t nS, std::size_t nE, std::size_t nA) :
+    sumParticlesStrike{nS, 0}, gridE{nE, 0.0}, gridA{nA, 0.0},
+    sumWeightStrike{nS, 0.0}, grossDeposition{nS, 0.0},
+    grossErosion{nS, 0.0}, aveSputtYld{nS, 0.0}, sputtYldCount{nS, 0},
+    energyDistribution{nS * nE * nA, 0.0}, sputtDistribution{nS * nE * nA, 0.0},
+    reflDistribution{nS * nE * nA, 0.0} {};
 
 };
 

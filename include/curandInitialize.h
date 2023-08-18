@@ -9,7 +9,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <iostream>
-#include "Particles.h"
+#include "particles.h"
 #include "libconfig.h++"
 
 template <typename T=std::mt19937>

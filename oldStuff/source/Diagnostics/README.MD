@@ -1,0 +1,2 @@
+- Dump particles trajectories. This alone is enough for any post-processing
+- Histogram

@@ -1,14 +1,16 @@
-/* constant expressions for boris */
+#include <cmath>
+
+#if USE_DOUBLE
+typedef double gitr_precision;
+#else
+typedef float gitr_precision;
+#endif
 
 namespace gitr_constants
 {
-
-/* in Coulombs */
-double constexpr electron_volt = 1.602176634e-19;
-
-/* in kg */
-double constexpr dalton = 1.660539066605e-27;
-
-double constexpr pi = 3.1415926535897932384626433832795028841971693993751058209749445923;
-
+    gitr_precision boltz = 1.3806504e-23;
+    gitr_precision hplanck = 6.62606896e-34;
+    gitr_precision e_mass = 9.1093837015e-31;
+    gitr_precision p_mass = 1.67262192369e-27; 
+    gitr_precision e_charge = 1.6021765e-19;
 }

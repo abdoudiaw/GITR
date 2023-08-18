@@ -4,24 +4,20 @@
 #define CUDA_CALLABLE_MEMBER
 #endif
 
-#include "flags.hpp"
+#include "flags.h"
 
-//CUDA_CALLABLE_MEMBER
-//Flags::Flags() : USE_IONIZATION{0} {};
-bool Flags::initialize_flags(libconfig::Config &cfg,std::string s, int default_value) 
+bool Flags::initialize_flags(libconfig::Config &cfg,std::string s) 
 {
-  std::string base = "flags.";
-  //int flag = getVariable_cfg<int> (cfg, base+s);
-  int flag;
-  if(cfg.lookupValue(base+s, flag))
-    {
-      std::cout << base+s << " = " << flag << std::endl;
-    }
-  else
-    {
-      flag = default_value;
-      std::cout << "WARNING: Failed importing " << base+s << ", defaulting value to "<< flag <<  std:: endl;
-    }
-  if(flag > 0) return true;
-  else return false;
+  // std::string base = "flags.";
+  // int flag = 0;
+  // bool success = getVariable_cfg<int>(cfg, base+s); // assuming getVariable_cfg can return a bool for success
+  // if (!success) {
+  //   std::cout << "Error: could not find flag " << s << " in config file." << std::endl;
+  //   exit(1);
+  // }
+
+  // return flag;
+  // int flag = getVariable_cfg<int> (cfg, base+s);
+  // if(flag > 0) return true;
+  // else return false;
 }

@@ -28,12 +28,12 @@ THE SOFTWARE.
 #include "cuda_runtime.h"
 #endif
 
-#include "managed_allocation.h"
+#include "managedAllocation.h"
 #include <memory>
 #include "device.h"
 #include <cstddef>
 #include <stdexcept>
-#include "Boundary.h"
+#include "boundary.h"
 #include <iomanip>
 #include <iostream>
 #include <vector>
