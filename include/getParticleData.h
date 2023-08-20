@@ -34,7 +34,7 @@ std::vector<std::string> getVarData(netCDF::NcFile& file, const std::string& var
 
 
 struct ParticleData {
-    std::vector<gitr_precision> impurity_id, xpfile, ypfile, zpfile, 
+    std::vector<gitr_precision> impurity_id, xpfile, ypfile, zpfile,
         vxpfile, vypfile, vzpfile, charge, mass, ionizationState;
     std::vector<std::string> materialName;
 };
@@ -51,8 +51,8 @@ ParticleData readParticleData(const std::string &ncParticleSourceFile) {
 
     try {
         netCDF::NcFile ncp0("input/" + ncParticleSourceFile, netCDF::NcFile::read);
-    } 
-    catch (netCDF::exceptions::NcException &e) 
+    }
+    catch (netCDF::exceptions::NcException &e)
     {
         e.what();
         std::cout << "FAILURE*************************************" << std::endl;
@@ -107,7 +107,7 @@ ParticleData readParticleData(const std::string &ncParticleSourceFile) {
     sim::Array<gitr_precision>& px, sim::Array<gitr_precision>& py, sim::Array<gitr_precision>& pz,
     sim::Array<gitr_precision>& pvx, sim::Array<gitr_precision>& pvy, sim::Array<gitr_precision>& pvz,
     sim::Array<gitr_precision>& pZ, sim::Array<gitr_precision>& pamu, sim::Array<gitr_precision>& pcharge,
-    gitr_precision dt,  sim::Array<std::string >& pmaterialName ) 
+    gitr_precision dt,  sim::Array<std::string >& pmaterialName )
     {
     int nP = particleData.materialName.size();
     long nParticles = nP;
@@ -153,19 +153,19 @@ ParticleData readParticleData(const std::string &ncParticleSourceFile) {
 
 }
 
-// Move this away at some point
 
 // Function to process plasma profiles
-std::tuple<int, int, int, std::vector<double>, std::vector<double>, std::vector<double>, std::vector<double>, std::vector<double>, std::vector<double>, std::vector<double>> processPlasmaBackground()
+std::tuple<int, int, int, std::vector<double>, std::vector<double>, std::vector<double>, std::vector<double>, std::vector<double>, std::vector<double>, std::vector<double>> processPlasmaBackground(const std::string &filename)
 {
     std::string input_path = "input/";
-    std::string plasmaFile = "plasmaProfile.nc";
+//    std::string plasmaFile = "plasmaProfile.nc";
+    std::string plasmaFile = filename;
 
     // Open the netCDF file
+//    netCDF::NcFile data(filename, netCDF::NcFile::read);
     netCDF::NcFile data(input_path + plasmaFile, netCDF::NcFile::read);
 
     // Get the variable objects
-    // variables(dimensions): float64 var(points), float64 ne(points), float64 te(points), float64 ni(points), float64 ti(points), float64 vx(points), float64 vy(points), float64 vz(points)
     netCDF::NcVar gridTe_var = data.getVar("te");
     netCDF::NcVar gridNe_var = data.getVar("ne");
     netCDF::NcVar gridTi_var = data.getVar("ti");
@@ -212,5 +212,6 @@ std::tuple<int, int, int, std::vector<double>, std::vector<double>, std::vector<
     return std::make_tuple(nTemperatures, nDensities, nVelocitiesX, std::move(gridTemperatureElectrons), std::move(gridTemperatureIons), std::move(grideDensity), std::move(gridiDensity),
     std::move(gridVelocityX), std::move(gridVelocityY), std::move(gridVelocityZ));
 }
+
 
 

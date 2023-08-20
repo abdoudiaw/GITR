@@ -1,5 +1,4 @@
 #include "geometryCheck.h"
-#include "constants.h"
 #include "flags.h"
 
 geometryCheck::geometryCheck(Particles* _particlesPointer, int _nLines, const Boundary* const _boundaryVector, Flags* _flags)
@@ -53,19 +52,24 @@ void geometryCheck::perform3DTetGeomCheck(std::size_t indx) const {
   }
 
   if (nBoundariesCrossed == 0) {
-    updateParticlePosition(indx, particlesPointer->x[indx], particlesPointer->y[indx], particlesPointer->z[indx], true);
+    // updateParticlePosition(indx, particlesPointer->x[indx], particlesPointer->y[indx], particlesPointer->z[indx], true);
 
     particlesPointer->distTraveled[indx] += dpath;
+    // printf("Particle did not hit any boundary\n");
+
+    // printf(" particle positions and velocities : %f %f %f %f %f %f\n", particlesPointer->x[indx], particlesPointer->y[indx], particlesPointer->z[indx], particlesPointer->vx[indx], particlesPointer->vy[indx], particlesPointer->vz[indx]);
   } else {
     particlesPointer->hitWall[indx] = 1.0;
     gitr_precision normal[3] = {boundaryVector[nearest_boundary_index].a, boundaryVector[nearest_boundary_index].b, boundaryVector[nearest_boundary_index].c};
     gitr_precision reflection_dir[3];
+    printf("temp_position_xyz : %f %f %f\n", temp_position_xyz[0], temp_position_xyz[1], temp_position_xyz[2]);
     reflectDirection(p1, temp_position_xyz, normal, reflection_dir);
     reflectParticle(indx, temp_position_xyz, reflection_dir);
     particlesPointer->distTraveled[indx] += nearest_boundary_distance;
     particlesPointer->surfaceHit[indx] = nearest_boundary_index;
     std::cout << "Particle reflected" << std::endl;
     std::cout << "nearest_boundary_index : " << nearest_boundary_index << std::endl;
+
   }
 }
 
@@ -81,14 +85,18 @@ void geometryCheck::reflectDirection(const gitr_precision p1[3], const gitr_prec
 
 __host__ __device__
 void geometryCheck::reflectParticle(std::size_t indx, const gitr_precision reflection_point[3], const gitr_precision reflection_dir[3]) const {
-  particlesPointer->x[indx] = reflection_point[0];
-  particlesPointer->y[indx] = reflection_point[1];
-  particlesPointer->z[indx] = reflection_point[2];
+  gitr_precision small_step = 1e-6;  // Small step to move the particle away from the wall
+  particlesPointer->x[indx] = reflection_point[0] + small_step * reflection_dir[0];
+  particlesPointer->y[indx] = reflection_point[1] + small_step * reflection_dir[1];
+  particlesPointer->z[indx] = reflection_point[2] + small_step * reflection_dir[2];
+
+  printf("Particle position after reflection: %g %g %g\n", particlesPointer->x[indx], particlesPointer->y[indx], particlesPointer->z[indx]);
 
   particlesPointer->vx[indx] = reflection_dir[0] * particlesPointer->v[indx];
   particlesPointer->vy[indx] = reflection_dir[1] * particlesPointer->v[indx];
   particlesPointer->vz[indx] = reflection_dir[2] * particlesPointer->v[indx];
 }
+
 
 __host__ __device__
 bool geometryCheck::isIntersected(const gitr_precision p0[3], const gitr_precision p1[3], const Boundary& boundary, gitr_precision intersectionPoint[3]) const {

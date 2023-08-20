@@ -1,4 +1,4 @@
-#include "particles.h"
+#include "Particles.h"
 #include "array.h"
 #include <iostream>
 #include <fstream>
@@ -14,8 +14,6 @@ void storeParticleData(const std::string& base_filename, Particles *particleArra
 
     std::string filename = base_filename + std::to_string(step_count);
     // Open the file in append mode
-    // std::ofstream f("output/" + filename, std::ios::out);
-// print we are here 
     std::ofstream f("output/" + filename, std::ios::app);
     if (!f) {
         std::cout << "Error opening file: " << filename << std::endl;
@@ -26,7 +24,6 @@ void storeParticleData(const std::string& base_filename, Particles *particleArra
     for (int i = 0; i < nP; i++) {
         if (std::find(materialNames.begin(), materialNames.end(), particleArray->materialName[i]) == materialNames.end()) {
             materialNames.push_back(particleArray->materialName[i]);
-            // std::cout << "Found material: " << particleArray->materialName[i] << std::endl;
         }
     }
     // get unique material names
@@ -55,8 +52,6 @@ void storeParticleData(const std::string& base_filename, Particles *particleArra
                 << particleArray->x[i] << "  " << particleArray->y[i]
                 << "  " << particleArray->z[i] <<  "  " << particleArray->vx[i]
                 << "  " << particleArray->vy[i] << "  " << particleArray->vz[i] <<  std::endl;
-                // << "  " << particleArray->charge[i] << "  " << particleArray->Z[i]
-                // << "  " << particleArray->amu[i] <<  " " << particleArray->materialName[i] <<  std::endl;
 
     }
 

@@ -88,6 +88,7 @@ use::use( class libconfig_string_query const &query,
 {
   lookup[ use::cuda ] = "USE_CUDA";
   lookup[ use::ionization ] = "USE_IONIZATION";
+    lookup[ use::recombination ] = "USE_RECOMBINATION";
   lookup[ use::perp_diffusion ] = "USE_PERPDIFFUSION";
   lookup[ use::backgroundCollisions ] = "USE_BACKGROUNDCOLLISIONS";
   lookup[ use::surface_model ] = "USE_SURFACEMODEL";

@@ -10,7 +10,7 @@
 #endif
 
 
-#include "particles.h"
+#include "Particles.h"
 #include <cmath>
 #include "interpolater.h"
 #include "pusher.h"
@@ -286,7 +286,6 @@ void operator()(std::size_t indx) {
     relativeVelocity[0] = vx - flowVr;
     relativeVelocity[1] = vy - flowVt;
     relativeVelocity[2] = vz - flowVz;
-
     velocityRelativeNorm = vectorNorm(relativeVelocity);
 
 #ifdef __CUDACC__
@@ -319,7 +318,6 @@ void operator()(std::size_t indx) {
 
     gitr_precision ti_eV = ti;
     gitr_precision density = ni;
-
     
     if(nu_parallel <=0.0) nu_parallel = 0.0;
 

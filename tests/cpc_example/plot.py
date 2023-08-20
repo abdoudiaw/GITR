@@ -3,23 +3,38 @@ import numpy  as np
 import libconf, io
 
 
+B= 1
+charge = 1.60217662e-19
+mass = 1.6726219e-27
+amu_oxygen = 16
 
+wc = charge * B / (mass * amu_oxygen)
+q_over_m = charge / mass
 
-data = nc.Dataset("input/O.nc","r")
-for var in data.variables:
-    print(var)
-print(len(data['materialName'][:]))
+T = 2*np.pi/ wc
+
+dt = 0.05 * T
+print(dt)
+
 
 #exit()
-## // get variables and data
-
-#print(data.variables.keys())
-x=data.variables['vx'][:]
-y=data.variables['vy'][:]
-z=data.variables['vz'][:]
 
 
-print(x,y,z)
+data = nc.Dataset("O.nc","r")
+for var in data.variables:
+    print(var)
+print(len(data['x'][:]))
+
+##exit()
+### // get variables and data
+#
+##print(data.variables.keys())
+#x=data.variables['vx'][:]
+#y=data.variables['vy'][:]
+#z=data.variables['vz'][:]
+#
+#
+#print(x,y,z)
 
 exit()
 #data = nc.Dataset("plasmaProfile.nc", "r")

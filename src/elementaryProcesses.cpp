@@ -90,8 +90,9 @@ std::tuple<size_t, size_t, size_t, std::vector<double>, std::vector<double>, std
 }
 
 template<typename T>
-elementaryProcesses<T>::elementaryProcesses(Particles* _particlesPointer, T* _state, int _nR_Dens, int _nZ_Dens, gitr_precision* _DensGridr, gitr_precision* _DensGridz, gitr_precision* _ne, int _nR_Temp, int _nZ_Temp, gitr_precision* _TempGridr, gitr_precision* _TempGridz, gitr_precision* _te, Flags* _flags)
-    : particlesPointer(_particlesPointer), nR_Dens(_nR_Dens), nZ_Dens(_nZ_Dens), DensGridr(_DensGridr), DensGridz(_DensGridz), ne(_ne), nR_Temp(_nR_Temp), nZ_Temp(_nZ_Temp), TempGridr(_TempGridr), TempGridz(_TempGridz), te(_te), state(_state),  flags (_flags)
+elementaryProcesses<T>::elementaryProcesses(Particles* _particlesPointer, T* _state, int _nR_Dens, int _nZ_Dens, gitr_precision* _DensGridr, gitr_precision* _DensGridz, gitr_precision* _ne, int _nR_Temp, int _nZ_Temp, gitr_precision* _TempGridr, gitr_precision* _TempGridz, gitr_precision* _te,Flags* _flags)
+    : particlesPointer(_particlesPointer), nR_Dens(_nR_Dens), nZ_Dens(_nZ_Dens), DensGridr(_DensGridr), DensGridz(_DensGridz), ne(_ne), nR_Temp(_nR_Temp), nZ_Temp(_nZ_Temp), TempGridr(_TempGridr), TempGridz(_TempGridz), te(_te), state(_state), flags(_flags)
+
 { }
 
 template<typename T>
@@ -137,7 +138,7 @@ void elementaryProcesses<T>::operator()(std::size_t indx)
         
     }
 
-    if (flags->USE_RECOMBINATION)
+    if (flags->USE_RECOMBINATION > 0)
     {
         gitr_precision dt = particlesPointer->dt[indx];
 

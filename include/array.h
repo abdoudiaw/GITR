@@ -33,7 +33,7 @@ THE SOFTWARE.
 #include "device.h"
 #include <cstddef>
 #include <stdexcept>
-#include "boundary.h"
+#include "Boundary.h"
 #include <iomanip>
 #include <iostream>
 #include <vector>

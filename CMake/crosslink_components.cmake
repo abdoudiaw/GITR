@@ -4,18 +4,17 @@
 target_link_libraries( surfaceReactions )
 target_link_libraries( elementaryProcesses  )
 target_link_libraries( interpolater thrust )
-target_link_libraries( flags libconfig thrust )
-target_link_libraries( utils libconfig thrust interpolater netcdf )
+target_link_libraries( flags libconfig thrust  )
+target_link_libraries( utils libconfig thrust interpolater netcdf  )
 target_link_libraries( utils pusher thrust )
 target_link_libraries( geometryCheck sheathModel pusher )
 
 # Improvement: Conditionally link based on whether the GITR_USE_<component> clause is enabled
 target_link_libraries( GITR 
                       interpolater
-                      flags
                       elementaryProcesses
                       netcdf 
-                      libconfig
+                      libconfig   
                       utils
                       sheathModel
                       pusher
@@ -23,6 +22,7 @@ target_link_libraries( GITR
                       geometryCheck
                       cli11
                       configInterface 
+                      flags
                       )
 if( GITR_USE_CUDA )
   target_link_libraries( GITR 

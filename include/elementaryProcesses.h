@@ -1,5 +1,5 @@
 
-#include "particles.h"
+#include "Particles.h"
 
 
 #ifdef __CUDACC__

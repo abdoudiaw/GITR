@@ -9,9 +9,9 @@
 #define CUDA_CALLABLE_MEMBER_DEVICE
 #endif
 
-#include "particles.h"
-#include "boundary.h"
-#include "surfaces.h"
+#include "Particles.h"
+#include "Boundary.h"
+#include "Surfaces.h"
 #include <cmath>
 #include "pusher.h"
 

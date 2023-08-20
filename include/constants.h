@@ -13,4 +13,6 @@ namespace gitr_constants
     gitr_precision e_mass = 9.1093837015e-31;
     gitr_precision p_mass = 1.67262192369e-27; 
     gitr_precision e_charge = 1.6021765e-19;
+    gitr_precision VACUUM_PERMITTIVITY = 8.854187e-12;
+
 }

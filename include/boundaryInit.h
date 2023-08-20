@@ -3,7 +3,7 @@
 
 #include "pusher.h"
 #include "interpolater.h"
-#include "boundary.h"
+#include "Boundary.h"
 
 #if USE_DOUBLE
 typedef double gitr_precision;
@@ -11,9 +11,15 @@ typedef double gitr_precision;
 typedef float gitr_precision;
 #endif
 
+// Constants
+
 constexpr gitr_precision q_e = 1.60217662e-19;
 constexpr gitr_precision me = 1.0/1836.152673440001;
 constexpr gitr_precision PI_CONST = 3.141592653589793;
+const gitr_precision VACUUM_PERMITTIVITY = 8.854187e-12;
+const gitr_precision PI = PI_CONST;
+const gitr_precision ELECTRON_MASS = me;
+const gitr_precision CHARGE = q_e;
 
 struct boundary_init {
     gitr_precision background_Z, background_amu;
@@ -57,57 +63,56 @@ struct boundary_init {
     B[0] = bfieldR[0];
     B[1] = bfieldT[0];
     B[2] = bfieldZ[0];
-    gitr_precision norm_B = vectorNorm(B),  theta;
-    if( use_3d_geom )
-        {
-            gitr_precision surfNorm[3] = {0.0,0.0,0.0};
-            b.getSurfaceNormal(surfNorm,0.0,0.0, use_3d_geom );
-            if (norm_B == 0.0)
-                { theta = 0.0; }
-            else
-                { theta = std::acos(vectorDotProduct(B,surfNorm)/(vectorNorm(B)*vectorNorm(surfNorm))); }
-            if (theta > PI_CONST * 0.5)
-                {
-                theta = std::abs(theta - (PI_CONST));
-                }
-            b.unit_vec0 = b.inDir*b.a/b.plane_norm; 
-            b.unit_vec1 = b.inDir*b.b/b.plane_norm; 
-            b.unit_vec2 = b.inDir*b.c/b.plane_norm;
-        }
-    else
-        {
-            gitr_precision br = B[0];
-            gitr_precision bt = B[1];
-            gitr_precision bz = B[2];
-            gitr_precision commonExpr = std::sqrt(br*br + bz*bz + bt*bt) * std::sqrt(b.slope_dzdx*b.slope_dzdx + 1.0);
-            if (norm_B == 0.0)
-                { theta = 0.0; }
-            else
-                { theta = std::acos((br*b.slope_dzdx + bz)/commonExpr); }
-            if (theta > PI_CONST*0.5)
-                {
-                    theta = std::acos((br*b.slope_dzdx - bz)/commonExpr);
-                }
+
+    gitr_precision magneticFieldNorm = vectorNorm(B);
+    gitr_precision angleBetweenBAndSurfaceNormal = 0.0;
+
+    if (use_3d_geom) {
+        gitr_precision surfaceNormal[3] = {0.0, 0.0, 0.0};
+        b.getSurfaceNormal(surfaceNormal, 0.0, 0.0, use_3d_geom);
+
+        gitr_precision surfaceNormalNorm = vectorNorm(surfaceNormal);
+        
+        if (magneticFieldNorm == 0.0 || surfaceNormalNorm == 0.0) {
+            angleBetweenBAndSurfaceNormal = 0.0;
+            
+            if (magneticFieldNorm == 0.0) {
+                printf("Warning: Bfield is zero at surface %d\n", b.surfaceNumber);
+            }
+        } else {
+            angleBetweenBAndSurfaceNormal = std::acos(vectorDotProduct(B, surfaceNormal) / (magneticFieldNorm * surfaceNormalNorm));
         }
 
-    b.angle = theta*180.0/PI_CONST;
-    b.debyeLength = std::sqrt(8.854187e-12*b.te/(b.ne*std::pow(background_Z,2)*q_e));
-    gitr_precision angle = b.angle;
-    gitr_precision sheath_fac = std::abs(0.5*std::log((2*PI_CONST*me/background_amu)*(1+b.ti/b.te)));
-    gitr_precision norm = std::acos(std::pow(std::exp(1),-sheath_fac));
+        // Adjusting the angle if it's greater than pi/2
+        if (angleBetweenBAndSurfaceNormal > PI / 2.0) {
+            angleBetweenBAndSurfaceNormal = std::abs(angleBetweenBAndSurfaceNormal - PI);
+        }
 
+        b.unit_vec0 = b.inDir * b.a / b.plane_norm; 
+        b.unit_vec1 = b.inDir * b.b / b.plane_norm; 
+        b.unit_vec2 = b.inDir * b.c / b.plane_norm;
+    }
+
+    b.angle = angleBetweenBAndSurfaceNormal * 180.0 / PI;
+    b.debyeLength = std::sqrt(VACUUM_PERMITTIVITY * b.te / (b.ne * std::pow(background_Z, 2) * CHARGE));
+
+    gitr_precision sheathFactor = std::abs(0.5 * std::log((2 * PI * ELECTRON_MASS / background_amu) * (1 + b.ti / b.te)));
+    gitr_precision normValue = std::acos(std::exp(-sheathFactor));
 
     if(b.ne == 0.0) b.debyeLength = 1.0e12;
+    
     b.flux = 0.25*b.density*std::sqrt(8.0*b.ti*q_e/(PI_CONST*background_amu));
+
     b.impacts = 0.0;
+
     if(b.te == 0.0)
         b.potential = 0.0;
     else
-        b.potential = sheath_fac*b.te;
+        b.potential = sheathFactor*b.te;
 
     
-    //  std::cout << "Surface number " << b.surfaceNumber << " has te and potential "  << b.te << " " << b.potential << " ne " << b.ne
-    //     << " theta " << theta << std::endl;
+     std::cout << "Surface number " << b.surfaceNumber << " has te "  << b.te << " and potential " << b.potential << " ne " << b.ne
+        << " theta " << b.angle << std::endl;
     
     }	
 };

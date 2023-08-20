@@ -9,13 +9,12 @@ TODO: have a separate function to calculate total electric field
 #include <algorithm>
 #include <cassert>
 
+#include <tuple>
+#include <cmath>
+
 #include "pusher.h"
 #include "sheathModel.h"
-
-
-constexpr  gitr_precision boltzmannConstant = 1; //1.38064852e-23;
-constexpr  gitr_precision protonCharge = 1; //1.60217662e-19;
-constexpr  gitr_precision p_mass = 1; //1.67262192369e-27;
+#include "constants.h"
 
 
 // Compute cross product of two vectors: AxB
@@ -98,10 +97,15 @@ void vectorCrossProduct(gitr_precision A[], gitr_precision B[], gitr_precision C
 
 
 
+//getSheathElectricField: this function needs to move into a separate file; it does a lot of things; simplify; 
+// have a function to calculate the distance and normal of a given point p0 to a boundary.
+
+// getSheathElectricField(position[0], position[1], position[2], E, boundaryVector, nLines, closestBoundaryIndex, gitr_flags->USE3DTETGEOM, particlesPointer->amu[indx], particlesPointer->charge[indx], B );
+
 
 CUDA_CALLABLE_MEMBER
 gitr_precision getSheathElectricField ( gitr_precision x0, gitr_precision y, gitr_precision z, gitr_precision E[], Boundary *boundaryVector, int nLines,
-         int&  closestBoundaryIndex, int use_3d_geom )
+         int&  closestBoundaryIndex, int use_3d_geom, gitr_precision mass, gitr_precision charge, gitr_precision Bmagnitude)
     {
 
     gitr_precision pot = 0.0;
@@ -490,24 +494,29 @@ top_limit = nLines;
     directionUnitVector[1] = directionUnitVector[1]/vectorMagnitude;
     directionUnitVector[2] = directionUnitVector[2]/vectorMagnitude;
     }
-
-
     if(minDistance == 0.0 || boundaryVector[minIndex].ne == 0.0 || boundaryVector[minIndex].te == 0.0)
         {
             Emag = 0.0;
             directionUnitVector[0] = 0.0;
             directionUnitVector[1] = 0.0;
             directionUnitVector[2] = 0.0;
-
-
         }
     else {
         // Call sheath model
-        gitr_precision phiNormalizationFactor =  11600.*boltzmannConstant*boundaryVector[minIndex].te/protonCharge;
-        gitr_precision phi =  CouletteManfredi(minDistance/boundaryVector[minIndex].debyeLength, boundaryVector[minIndex].angle) * phiNormalizationFactor;
-        Emag = abs( (abs(phi)-abs(boundaryVector[minIndex].potential)) / minDistance);
-    }
+        gitr_precision phiNormalizationFactor =  11600.0*gitr_constants::boltz/boundaryVector[minIndex].te/gitr_constants::p_mass;
+        gitr_precision distance2surface = abs(minDistance/boundaryVector[minIndex].debyeLength);
 
+        // gitr_precision phi =  CouletteManfredi(minDistance/boundaryVector[minIndex].debyeLength, boundaryVector[minIndex].angle) * phiNormalizationFactor;
+        // gitr_precision E_new  =  CouletteManfredi(abs(minDistance/boundaryVector[minIndex].debyeLength), boundaryVector[minIndex].angle) * phiNormalizationFactor / boundaryVector[minIndex].debyeLength;
+
+        gitr_precision omega_c = charge * gitr_constants::e_charge * Bmagnitude / mass / gitr_constants::p_mass;
+        gitr_precision cs = sqrt(gitr_constants::boltz * boundaryVector[minIndex].te * 11600. / mass / gitr_constants::p_mass);
+        gitr_precision larmorRadius =  cs / omega_c;
+        gitr_precision E_new = BrooksModel(abs(minDistance), boundaryVector[minIndex].angle, larmorRadius, boundaryVector[minIndex].te);
+
+        Emag = abs(E_new);
+
+    }
     Er = Emag*directionUnitVector[0];
     Et = Emag*directionUnitVector[1];
     E[2] = Emag*directionUnitVector[2];
@@ -540,10 +549,11 @@ pusher::pusher(
   gitr_precision * _BfieldRDevicePointer,
   gitr_precision * _BfieldZDevicePointer,
   gitr_precision * _BfieldTDevicePointer,
-  Flags* _gitr_flags)
+ Flags* _gitr_flags)
   : 
   particlesPointer(_particlesPointer),
         boundaryVector(_boundaryVector),
+        nLines(_nLines),
         nR_Bfield(_nR_Bfield),
         nZ_Bfield(_nZ_Bfield),
         BfieldGridRDevicePointer(_BfieldGridRDevicePointer),
@@ -551,100 +561,114 @@ pusher::pusher(
         BfieldRDevicePointer(_BfieldRDevicePointer),
         BfieldZDevicePointer(_BfieldZDevicePointer),
         BfieldTDevicePointer(_BfieldTDevicePointer),
-        gitr_flags(_gitr_flags),
-        nLines(_nLines)
+       gitr_flags(_gitr_flags)
         {}
 
 CUDA_CALLABLE_MEMBER    
 void pusher::operator()(std::size_t indx) {
-        const gitr_precision position[3] = {particlesPointer->xprevious[indx], particlesPointer->yprevious[indx], particlesPointer->zprevious[indx]};
-        gitr_precision v[3] = {particlesPointer->vx[indx], particlesPointer->vy[indx], particlesPointer->vz[indx]};
-        gitr_precision E[3] = {0.0, 0.0, 0.0};
-        gitr_precision B[3] = {0.0,0.0,0.0};
+    gitr_precision position[3] = {particlesPointer->xprevious[indx], particlesPointer->yprevious[indx], particlesPointer->zprevious[indx]};
 
-        gitr_precision tau[3] = {0.0,0.0,0.0};
-        gitr_precision s[3] = {0.0,0.0,0.0};
-        gitr_precision v_plus[3] = {0.0,0.0,0.0};
+    gitr_precision v[3] = {particlesPointer->vx[indx], particlesPointer->vy[indx], particlesPointer->vz[indx]};
+    gitr_precision E[3] = {0.0, 0.0, 0.0};
+    gitr_precision B[3] = {0.0, 0.0, 0.0};
 
-        gitr_precision Bmag = 0.0, Econst, Bconst;
-        gitr_precision cross_product = 0.0;
-        gitr_precision v_minus[3] = {0.0,0.0,0.0};
-        gitr_precision v_prime[3] = {0.0,0.0,0.0};
-        gitr_precision v_h[3] = {0.0,0.0,0.0};
+    int closestBoundaryIndex;
+    int geomIndex = 0;
+  
+    // if neutral stream 
+    if (particlesPointer->charge[indx] == 0.0) {
+        particlesPointer->x[indx] += particlesPointer->vx[indx] * particlesPointer->dt[indx];
+        particlesPointer->y[indx] += particlesPointer->vy[indx] * particlesPointer->dt[indx];
+        particlesPointer->z[indx] += particlesPointer->vz[indx] * particlesPointer->dt[indx];
+        return;
+    }
+     // Get magnetic field
+    interp2dVector(&B[0], position[0], position[1], position[2], nR_Bfield, nZ_Bfield, BfieldGridRDevicePointer, BfieldGridZDevicePointer, BfieldRDevicePointer, BfieldZDevicePointer, BfieldTDevicePointer );
+    gitr_precision q_over_m = particlesPointer->charge[indx] * gitr_constants::e_charge / particlesPointer->amu[indx] / gitr_constants::p_mass;
+    gitr_precision dt = particlesPointer->dt[indx];
 
-        int closestBoundaryIndex;
+   // get larmorRadius
+    gitr_precision Bmagnitude = sqrt(B[0]*B[0] + B[1]*B[1] + B[2]*B[2]);
 
+    // get electric field
+    if (gitr_flags->USE_SHEATHEFIELD ) {
+        getSheathElectricField(position[0], position[1], position[2], E, boundaryVector, nLines, closestBoundaryIndex, gitr_flags->USE3DTETGEOM, particlesPointer->amu[indx], particlesPointer->charge[indx], Bmagnitude );
+    }
 
-        // if neutral stream 
-        if (particlesPointer->charge[indx] == 0.0) {
-            particlesPointer->x[indx] += particlesPointer->vx[indx] * particlesPointer->dt[indx];
-            particlesPointer->y[indx] += particlesPointer->vy[indx] * particlesPointer->dt[indx];
-            particlesPointer->z[indx] += particlesPointer->vz[indx] * particlesPointer->dt[indx];
-        }
-
-        // if (gitr_flags->USE_SHEATHEFIELD > 0) {
-        //     getSheathElectricField(position[0], position[1], position[2], E, boundaryVector, nLines, closestBoundaryIndex, gitr_flags->USE3DTETGEOM);
-        // }
-
-        // print electric field
-        // std::cout << "E: " << E[0] << " " << E[1] << " " << E[2] << std::endl;
-    
-        // interp2dVector(&B[0], position[0], position[1], position[2], nR_Bfield, nZ_Bfield, BfieldGridRDevicePointer, BfieldGridZDevicePointer, BfieldRDevicePointer, BfieldZDevicePointer, BfieldTDevicePointer );
-        // print magnetic field
-        E[0] = 0.0;
-        E[1] = 0.0;
-        E[2] = 0.0;
-        B[0] = 1.0;
-        B[1] = 0.0;
-        B[2] = 0.0;
-        Bmag = std::sqrt(B[0]*B[0] + B[1]*B[1] + B[2]*B[2]);
-        Econst = particlesPointer->dt[indx] * 0.5; //particlesPointer->charge[indx] * protonCharge * particlesPointer->dt[indx] * 0.5 /   (particlesPointer->amu[indx] * p_mass);
-        Bconst = particlesPointer->dt[indx] * 0.5 ; //particlesPointer->charge[indx] * protonCharge * particlesPointer->dt[indx] * 0.5 / (particlesPointer->amu[indx] * p_mass );
-        // std::cout << "charge[indx]: " << particlesPointer->charge[indx] << std::endl;
-        // Implement Boris pusher
-        // Update velocity by half a time step
-for (int i=0; i<3; i++) {
-    
-    v_minus[i] = v[i] + Econst * E[i];  // Half electric field update
-
-    tau[i] = Bconst * B[i];  // Assuming Bconst is the appropriate constant for B
-    s[i] = 2.0 * tau[i] / (1.0 + tau[i] * tau[i]);
-
-    v_prime[i] = v_minus[i] + (v_minus[(i+1)%3] * tau[(i+2)%3] - v_minus[(i+2)%3] * tau[(i+1)%3]);
-    
-    // compute_cross_product(v_minus, tau, i);
-    v_plus[i] = v_prime[i] + compute_cross_product(v_prime, s, i);
-    
-    v[i] = v_plus[i] + Econst * E[i];  // Another half electric field update
-
+    // call the boris_push 
+    if (particlesPointer->hitWall[indx] == 0.0)
+    {
+        std::tie(particlesPointer->x[indx], particlesPointer->y[indx], particlesPointer->z[indx], particlesPointer->vx[indx], particlesPointer->vy[indx], particlesPointer->vz[indx]) = 
+        borisPush(particlesPointer, indx, E, B);
+    }
 }
 
+std::tuple<gitr_precision, gitr_precision, gitr_precision,
+           gitr_precision, gitr_precision, gitr_precision> 
+borisPush(Particles *particlesPointer, std::size_t indx,
+          gitr_precision E[3], gitr_precision B[3]) {
 
+    // Extract initial values from particle using pointers and indx
+    gitr_precision x_i = particlesPointer->x[indx];
+    gitr_precision y_i = particlesPointer->y[indx];
+    gitr_precision z_i = particlesPointer->z[indx];
+    gitr_precision ux_i = particlesPointer->vx[indx];
+    gitr_precision uy_i = particlesPointer->vy[indx];
+    gitr_precision uz_i = particlesPointer->vz[indx];
 
-        std::cout << "E: " << E[0] << " " << E[1] << " " << E[2] << std::endl;
-        std::cout << "B: " << B[0] << " " << B[1] << " " << B[2] << std::endl;
-        // std::cout << "t: " << t[0] << " " << t[1] << " " << t[2] << std::endl;
-        std::cout << "v: " << v[0] << " " << v[1] << " " << v[2] << std::endl;
+    // Extract magnetic field components
+    gitr_precision Bx = B[0];
+    gitr_precision By = B[1];
+    gitr_precision Bz = B[2];
 
-                particlesPointer->x[indx] += v[0] * particlesPointer->dt[indx];
-        particlesPointer->y[indx] += v[1] * particlesPointer->dt[indx];
-        particlesPointer->z[indx] += v[2] * particlesPointer->dt[indx];
-        particlesPointer->vx[indx] = v[0];
-                    std::cout << "x: " << particlesPointer->x[indx] << " " << particlesPointer->y[indx] << " " << particlesPointer->z[indx] << std::endl;
+    // Extract electric field components
+    gitr_precision Ex = E[0];
+    gitr_precision Ey = E[1];
+    gitr_precision Ez = E[2];
 
+    // Calculate q_over_m
+    gitr_precision q_over_m = particlesPointer->charge[indx] * gitr_constants::e_charge / (particlesPointer->amu[indx] * gitr_constants::p_mass);
 
-        // print velocity and new position
-        // std::cout << "v: " << v[0] << " " << v[1] << " " << v[2] << std::endl;
-        // // std::cout << "x: " << particlesPointer->x[indx] << " " << particlesPointer->y[indx] << " " << particlesPointer->z[indx] << std::endl;
-        // if (particlesPointer->hitWall[indx] == 0.0) {
-        //     particlesPointer->x[indx] += v[0] * particlesPointer->dt[indx];
-        //     particlesPointer->y[indx] += v[1] * particlesPointer->dt[indx];
-        //     particlesPointer->z[indx] += v[2] * particlesPointer->dt[indx];
-        //     particlesPointer->vx[indx] = v[0];
-        //     particlesPointer->vy[indx] = v[1];
-        //     particlesPointer->vz[indx] = v[2];    
-        //             std::cout << "x: " << particlesPointer->x[indx] << " " << particlesPointer->y[indx] << " " << particlesPointer->z[indx] << std::endl;
+    // Half acceleration by electric field
+    gitr_precision ux_minus = ux_i + 0.5 * q_over_m * Ex * particlesPointer->dt[indx];
+    gitr_precision uy_minus = uy_i + 0.5 * q_over_m * Ey * particlesPointer->dt[indx];
+    gitr_precision uz_minus = uz_i + 0.5 * q_over_m * Ez * particlesPointer->dt[indx];
 
-        // }
-    }
-    
+    // Rotation by magnetic field
+    gitr_precision t_x = q_over_m * Bx * 0.5 * particlesPointer->dt[indx];
+    gitr_precision t_y = q_over_m * By * 0.5 * particlesPointer->dt[indx];
+    gitr_precision t_z = q_over_m * Bz * 0.5 * particlesPointer->dt[indx];
+
+    gitr_precision denom = 1 + t_x*t_x + t_y*t_y + t_z*t_z;
+    gitr_precision s_x = 2*t_x / denom;
+    gitr_precision s_y = 2*t_y / denom;
+    gitr_precision s_z = 2*t_z / denom;
+
+    gitr_precision ux_prime = ux_minus + uy_minus * t_z - uz_minus * t_y;
+    gitr_precision uy_prime = uy_minus + uz_minus * t_x - ux_minus * t_z;
+    gitr_precision uz_prime = uz_minus + ux_minus * t_y - uy_minus * t_x;
+
+    gitr_precision ux_plus = ux_minus + uy_prime * s_z - uz_prime * s_y;
+    gitr_precision uy_plus = uy_minus + uz_prime * s_x - ux_prime * s_z;
+    gitr_precision uz_plus = uz_minus + ux_prime * s_y - uy_prime * s_x;
+
+    // Half acceleration by electric field again
+    gitr_precision ux_f = ux_plus + 0.5 * q_over_m * Ex * particlesPointer->dt[indx];
+    gitr_precision uy_f = uy_plus + 0.5 * q_over_m * Ey * particlesPointer->dt[indx];
+    gitr_precision uz_f = uz_plus + 0.5 * q_over_m * Ez * particlesPointer->dt[indx];
+
+    // Updating particle positions
+    gitr_precision x_f = x_i + ux_f * particlesPointer->dt[indx];
+    gitr_precision y_f = y_i + uy_f * particlesPointer->dt[indx];
+    gitr_precision z_f = z_i + uz_f * particlesPointer->dt[indx];
+
+    // Finally, update particle properties directly
+    particlesPointer->x[indx] = x_f;
+    particlesPointer->y[indx] = y_f;
+    particlesPointer->z[indx] = z_f;
+    particlesPointer->vx[indx] = ux_f;
+    particlesPointer->vy[indx] = uy_f;
+    particlesPointer->vz[indx] = uz_f;
+
+    return std::make_tuple(x_f, y_f, z_f, ux_f, uy_f, uz_f);
+}

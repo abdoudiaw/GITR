@@ -19,10 +19,11 @@
 #include <thrust/sequence.h>
 #include <thrust/sort.h>
 #include <thrust/transform.h>
+#include <indicators/progress_bar.hpp>
 
 #include "array.h"
 #include "boundaryInit.h"
-#include "boundary.h"
+#include "Boundary.h"
 #include "configInterface.h"
 #include "curandInitialize.h"
 #include "flags.h"
@@ -30,12 +31,14 @@
 #include "geometryCheck.h"
 #include "interpolater.h"
 #include "elementaryProcesses.h"
-#include "particles.h"
+#include "Particles.h"
 #include "pusher.h"
 #include "surfaceReactions.h"
 #include "utils.h"
 #include "dump.h"
 #include "getParticleData.h"
+#include "progressBar.h"
+
 
 #ifdef __CUDACC__
 #include <curand.h>
@@ -57,7 +60,6 @@ netCDF::NcType netcdf_precision = netCDF::ncFloat;
     typedef std::mt19937 rand_type;
 #endif
 
-
 int main(int argc, char **argv, char **envp) {
   CLI::App app{ "!" };
   std::string file_name = "input/gitrInput.cfg";
@@ -68,32 +70,45 @@ int main(int argc, char **argv, char **envp) {
   auto gitr_start_clock = gitr_time::now();
   class libconfig_string_query query( file_name );
   class use use( query );
+
   int use_3d_geom = use.get< int >( use::use_3d_geom );
   int bfield_interp = use.get< int >( use::bfield_interp );
   int presheath_interp = use.get< int >( use::presheath_interp );
   int surface_potential = use.get< int >( use::surface_potential );
- int sheath_efield = use.get< int >( use::sheath_efield );
- int ionization = use.get< int >( use::ionization );
- printf("ionization %d \n", ionization);
- int backgroundCollisions = use.get< int >( use::backgroundCollisions );
- int surface_model = use.get< int >( use::surface_model );
+  int sheath_efield = use.get< int >( use::sheath_efield );
+  int ionization = use.get< int >( use::ionization );
+  int recombination = use.get< int >( use::recombination );
+  int backgroundCollisions = use.get< int >( use::backgroundCollisions );
+  int surface_model = use.get< int >( use::surface_model );
 
+  // Set default processes per node to 1
+  int ppn = 1;
 
- // Set default processes per node to 1
- int ppn = 1;
- // Set default input file string
- std::string inputFile = file_name;
- read_comand_line_args(argc,argv,ppn,inputFile);
+  // Set default input file string
+  std::string inputFile = file_name;
+  read_comand_line_args(argc,argv,ppn,inputFile);
 
-int world_rank = 0;
-int world_size = 1;
+  int world_rank = 0;
+  int world_size = 1;
 
-std::string input_path = "input/";
-libconfig::Config cfg, cfg_geom;
-cfg.setAutoConvert(true);
-cfg_geom.setAutoConvert(true);
+  std::string input_path = "input/";
+  libconfig::Config cfg, cfg_geom;
+  cfg.setAutoConvert(true);
+  cfg_geom.setAutoConvert(true);
 
+try {
+    cfg.readFile(inputFile.c_str());
+} catch (const libconfig::FileIOException &fioex) {
+    std::cerr << "I/O error while reading file." << std::endl;
+    return(EXIT_FAILURE);
+} catch (const libconfig::ParseException &pex) {
+    std::cerr << "Parse error at " << pex.getFile() << ":" << pex.getLine()
+              << " - " << pex.getError() << std::endl;
+    return(EXIT_FAILURE);
+}
 auto gitr_flags = new Flags(cfg);
+
+// exit(0);
 
 
 gitr_precision background_Z = 0.0, background_amu = 0.0;
@@ -173,19 +188,20 @@ gitr_precision background_Z = 0.0, background_amu = 0.0;
   sim::Array<gitr_precision> ti(n_Temp), te(n_Temp);
 
 // read in the plasma background profiles
-std::tuple<int, int, int, std::vector<double>, std::vector<double>, std::vector<double>, std::vector<double>, std::vector<double>, std::vector<double>, std::vector<double>> plasmaResult = processPlasmaBackground();
-int nTemperatures = std::get<0>(plasmaResult);
-int nDensities = std::get<1>(plasmaResult);
-int nVelocities = std::get<2>(plasmaResult);
+std::string plasmaFile = "plasmaProfile.nc";
+std::tuple<int, int, int, std::vector<double>, std::vector<double>, std::vector<double>, std::vector<double>, std::vector<double>, std::vector<double>, std::vector<double>> backgroundPlasma = processPlasmaBackground(plasmaFile);
+int nTemperatures = std::get<0>(backgroundPlasma);
+int nDensities = std::get<1>(backgroundPlasma);
+int nVelocities = std::get<2>(backgroundPlasma);
 
-te = std::get<3>(plasmaResult);
-ti = std::get<4>(plasmaResult);
-ne = std::get<5>(plasmaResult);
-ni = std::get<6>(plasmaResult);
+te = std::get<3>(backgroundPlasma);
+ti = std::get<4>(backgroundPlasma);
+ne = std::get<5>(backgroundPlasma);
+ni = std::get<6>(backgroundPlasma);
 
-flowVr = std::get<7>(plasmaResult);
-flowVt = std::get<8>(plasmaResult);
-flowVz = std::get<9>(plasmaResult);
+flowVr = std::get<7>(backgroundPlasma);
+flowVt = std::get<8>(backgroundPlasma);
+flowVz = std::get<9>(backgroundPlasma);
 
 
 // initialize plasma conditions at the surface boundary
@@ -277,15 +293,16 @@ flowVz = std::get<9>(plasmaResult);
      #endif
    }
 
+
   pusher pusher0( particleArray, boundaries.data(), nLines, nR_Bfield, nZ_Bfield, bfieldGridr.data(), &bfieldGridz.front(), &br.front(), &bz.front(), &by.front(), gitr_flags);
 
-  // geometryCheck geometryCheck0(particleArray, nLines, &boundaries[0], gitr_flags);
+  geometryCheck geometryCheck0(particleArray, nLines, &boundaries[0], gitr_flags);
 
-  // backgroundCollisionsMCC backgroundCollisionsMCC0(particleArray, &state1.front(), flowVr[0], flowVz[0], flowVt[0], ne[0], ni[0], ti[0], te[0], background_Z, background_amu);
+  backgroundCollisionsMCC backgroundCollisionsMCC0(particleArray, &state1.front(), flowVr[0], flowVz[0], flowVt[0], ne[0], ni[0], ti[0], te[0], background_Z, background_amu);
 
-  // elementaryProcesses<rand_type> elementaryProcesses0( particleArray, &state1.front(), nR_Dens, nZ_Dens, &DensGridr.front(),
-  //      &DensGridz.front(), &ne.front(), nR_Temp, nZ_Temp, &TempGridr.front(),
-  //      &TempGridz.front(), &te.front(), gitr_flags );
+  elementaryProcesses<rand_type> elementaryProcesses0( particleArray, &state1.front(), nR_Dens, nZ_Dens, &DensGridr.front(),
+       &DensGridz.front(), &ne.front(), nR_Temp, nZ_Temp, &TempGridr.front(),
+       &TempGridz.front(), &te.front(), gitr_flags );
 
 //  surfaceReactions surfaceReactions0(  particleArray, &state1.front(), nLines, &boundaries[0], surfaces, gitr_flags);
 
@@ -319,33 +336,39 @@ flowVz = std::get<9>(plasmaResult);
      getVariable(cfg, domainBounds + "zmax", domain.zmax);
      getVariable(cfg, domainBounds + "zmin", domain.zmin);
 
-// Main loop
- for (int tt = 0; tt < nT; tt++) {
-     thrust::for_each(thrust::device, particleBegin, particleEnd,
-         [&] __device__ (auto& particle) {
-             pusher0(particle);
-            // geometryCheck0(particle);
-            //  if (ionization > 0 ) elementaryProcesses0(particle);
-            //  if (backgroundCollisions > 0) backgroundCollisionsMCC0(particle);
-            //  if (surface_model > 0) surfaceReactions0(particle);
+  {
+      ProgressBar progressBar(nT);
+      for (int tt = 0; tt < nT; tt++) {
 
-         }
+          thrust::for_each(thrust::device, particleBegin, particleEnd, 
+              [&] __device__ (auto& particle) {
+                  if (ionization > 0 || recombination > 0) elementaryProcesses0(particle);
+                  if (backgroundCollisions > 0) backgroundCollisionsMCC0(particle);
+                  // if (surface_model > 0) surfaceReactions0(particle);
+                  pusher0(particle);
+                  geometryCheck0(particle);
+              }
+          );
 
-     );
-   // Store particle data
-   if (tt % subSampleFac == 0)
-       storeParticleData(outputFileName, particleArray, nP, domain, tt);
- }
+          // Store particle data
+          if (tt % subSampleFac == 0) {
+              storeParticleData(outputFileName, particleArray, nP, domain, tt);
+          }
 
- #if __CUDACC__
- cudaDeviceSynchronize();
- #endif
+          progressBar.increment(); // Update progress bar
+      }
+      progressBar.finish();
+  }
 
- auto finish_clock = gitr_time::now();
- std::chrono::duration<gitr_precision> fs = finish_clock - start_clock;
- printf("Time taken is %6.3f (secs) \n", fs.count());
- printf("Time taken per step is %6.3f (secs) \n", fs.count() / (gitr_precision)nT);
+  #if __CUDACC__
+      cudaDeviceSynchronize();
+  #endif
 
-return 0;
- 
+  auto finish_clock = gitr_time::now();
+  auto fs = std::chrono::duration_cast<std::chrono::seconds>(finish_clock - start_clock);
+
+  std::cout << "Time taken is " << fs.count() << " secs" << std::endl;
+  std::cout << "Time taken per step is " << fs.count() / static_cast<float>(nT) << " secs" << std::endl;
+
+  return 0;
 }

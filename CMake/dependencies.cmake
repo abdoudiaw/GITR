@@ -19,7 +19,7 @@ set( CMAKE_BUILD_WITH_INSTALL_RPATH True )
 # ensure shared dependency libs are discoverable at load-time
 set( CMAKE_INSTALL_RPATH
      "${CMAKE_BINARY_DIR}"
-      # "${prefix}/gsl_install/lib"
+      "${prefix}/indicators_install/lib"
      "${prefix}/libconfig_install/lib"
      "${prefix}/netcdf-c-install/lib"
      "${prefix}/netcdf-cxx4-install/lib" )
@@ -32,7 +32,7 @@ if( GITR_USE_CUDA )
   include( CMake/cuda.cmake ) 
   list ( APPEND dependencies cuda::cudart )
 endif()
-# include( CMake/gsl.cmake )
+include( CMake/indicators.cmake )
 include( CMake/thrust.cmake ) 
 include( CMake/libconfig.cmake ) 
 include( CMake/netcdf.cmake ) 

@@ -11,11 +11,13 @@
 #endif
 
 #include <algorithm>
-#include "particles.h"
-#include "boundary.h"
+#include "Particles.h"
+#include "Boundary.h"
 #include "interpolater.h"
 #include "flags.h"
 #include <algorithm>
+
+#include <tuple>
 
 #if USE_DOUBLE
 typedef double gitr_precision;
@@ -48,13 +50,17 @@ CUDA_CALLABLE_MEMBER
 void vectorCrossProduct(gitr_precision A[], gitr_precision B[], gitr_precision C[]);
 
 CUDA_CALLABLE_MEMBER
-gitr_precision getSheathElectricField ( gitr_precision x0, gitr_precision y, gitr_precision z, gitr_precision E[], Boundary *boundaryVector, int nLines, int&  closestBoundaryIndex , int use_3d_geom) ;
-
-
+gitr_precision getSheathElectricField ( gitr_precision x0, gitr_precision y, gitr_precision z, gitr_precision E[], Boundary *boundaryVector, int nLines,
+         int&  closestBoundaryIndex, int use_3d_geom, gitr_precision mass, gitr_precision charge, gitr_precision Bmagnitude);
 CUDA_CALLABLE_MEMBER
 gitr_precision compute_cross_product(const gitr_precision A[3], const gitr_precision B[3], int i); 
 
-
+// Function declaration for boris_push
+CUDA_CALLABLE_MEMBER
+std::tuple<gitr_precision, gitr_precision, gitr_precision,
+           gitr_precision, gitr_precision, gitr_precision> 
+borisPush(Particles *particlesPointer, std::size_t indx,
+          gitr_precision E[3], gitr_precision B[3]);
 
 struct pusher{ 
     Particles *particlesPointer;
@@ -67,7 +73,7 @@ struct pusher{
     gitr_precision * BfieldZDevicePointer;
     gitr_precision * BfieldTDevicePointer;
     Flags* gitr_flags;
-    const int nLines;
+    int nLines;
 
     pusher(Particles *_particlesPointer , Boundary *_boundaryVector,int _nLines,
             int _nR_Bfield, int _nZ_Bfield,

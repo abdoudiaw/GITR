@@ -84,8 +84,8 @@ def readParticleSourceFile(filename):
 
 if __name__ == "__main__":
     filename = "particleSource.nc"
-    te = 2.0
-    ti = 2.0
+    te = 20.0
+    ti = 20.0
     material1  = tungsten
     material2 = oxygen
 

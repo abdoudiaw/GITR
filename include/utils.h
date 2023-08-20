@@ -10,7 +10,7 @@
 #include "ncFile.h"
 #include "ncVar.h"
 #include "ncDim.h"
-#include "boundary.h"
+#include "Boundary.h"
 #include <vector>
 #include <stdlib.h>
 #include <cstdlib>
@@ -48,6 +48,7 @@ struct GitrConfig {
     int sheath_efield;
     int presheath_efield;
     int ionization;
+    int recombination;
     int use_ionization;
     int coulomb_collisions;
     int perp_diffusion;

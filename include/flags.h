@@ -12,20 +12,29 @@
 
 class Flags : public ManagedAllocation
 {
-  private:
-  public:
+    private:
+    public:
+    const bool USE_SHEATHEFIELD;
     const bool USE3DTETGEOM;
     const bool USE_SURFACEMODEL;
-    const bool USE_SHEATHEFIELD;
-        const bool USE_IONIZATION;
+    const bool USE_IONIZATION;
     const bool USE_RECOMBINATION;
-   CUDA_CALLABLE_MEMBER
-   Flags(libconfig::Config &cfg) : 
-    USE3DTETGEOM{initialize_flags(cfg,"USE3DTETGEOM")},
-    USE_SURFACEMODEL{initialize_flags(cfg,"USE_SURFACEMODEL")},
+    const bool FIXED_SEEDS;
+    const bool USE_ADAPTIVE_DT;
+
+    
+    CUDA_CALLABLE_MEMBER
+    Flags(libconfig::Config &cfg) : 
         USE_IONIZATION{initialize_flags(cfg,"USE_IONIZATION")},
-    USE_RECOMBINATION{initialize_flags(cfg,"USE_RECOMBINATION")},
-    USE_SHEATHEFIELD{initialize_flags(cfg,"USE_SHEATHEFIELD")} {};
-   bool initialize_flags(libconfig::Config &cfg, std::string s);
+        FIXED_SEEDS{initialize_flags(cfg,"FIXED_SEEDS")},
+       USE_SHEATHEFIELD{initialize_flags(cfg,"USE_SHEATHEFIELD")},
+        USE3DTETGEOM{initialize_flags(cfg,"USE3DTETGEOM")},
+        USE_SURFACEMODEL{initialize_flags(cfg,"USE_SURFACEMODEL")},
+        USE_RECOMBINATION{initialize_flags(cfg,"USE_RECOMBINATION")},
+        USE_ADAPTIVE_DT{initialize_flags(cfg,"USE_ADAPTIVE_DT")} {};
+    bool initialize_flags(libconfig::Config &cfg, std::string s);
 };
 #endif
+
+
+

@@ -5,7 +5,7 @@
 #include <string>
 #include <cstring>
 #include <netcdf.h>
-#include "boundary.h"
+#include "Boundary.h"
 #include "libconfig.h++"
 #include <cstdlib>
 #ifdef __CUDACC__
@@ -70,6 +70,7 @@ void checkFlags(libconfig::Config &cfg)
     std::cout << "Checking compatibility of compile flags with input file "
                       << std::endl;
     const char *flags0[] = {"flags.USE_IONIZATION",
+                            "flags.USE_RECOMBINATION",  
                             "flags.USERECOMBINATION","flags.USEPERPDIFFUSION",
                             "flags.USECOULOMBCOLLISIONS","flags.USESURFACEMODEL",
                             "flags.USESHEATHEFIELD","flags.BIASED_SURFACE",

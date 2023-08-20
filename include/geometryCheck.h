@@ -9,8 +9,8 @@
 
 #include <cmath>
 
-#include "boundary.h"
-#include "particles.h"
+#include "Boundary.h"
+#include "Particles.h"
 #include "surfaceReactions.h"
 #include "pusher.h"
 

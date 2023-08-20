@@ -12,8 +12,8 @@ endif()
 # CPU-only targets
 set(non_gpu_targets
     utils
-    flags
     configInterface
+    flags
     )
 
 # Conditionally compile as GPU targets
