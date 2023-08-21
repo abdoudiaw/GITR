@@ -32,6 +32,7 @@ void geometryCheck::perform3DTetGeomCheck(std::size_t indx) const {
     gitr_precision intersectionPoint[3] = {0.0};
     if (isIntersected(p0, p1, boundaryVector[i], intersectionPoint)) {
       if (isPointInsideTriangle(intersectionPoint, boundaryVector[i])) {
+
         gitr_precision dist_to_p = sqrt((intersectionPoint[0] - xprev) * (intersectionPoint[0] - xprev) + (intersectionPoint[1] - yprev) * (intersectionPoint[1] - yprev) + (intersectionPoint[2] - zprev) * (intersectionPoint[2] - zprev));
         if (dist_to_p < nearest_boundary_distance) {
           nearest_boundary_distance = dist_to_p;
@@ -57,18 +58,21 @@ void geometryCheck::perform3DTetGeomCheck(std::size_t indx) const {
     particlesPointer->distTraveled[indx] += dpath;
     // printf("Particle did not hit any boundary\n");
 
-    // printf(" particle positions and velocities : %f %f %f %f %f %f\n", particlesPointer->x[indx], particlesPointer->y[indx], particlesPointer->z[indx], particlesPointer->vx[indx], particlesPointer->vy[indx], particlesPointer->vz[indx]);
+    printf(" particle positions and velocities : %f %f %f %f %f %f\n", particlesPointer->x[indx], particlesPointer->y[indx], particlesPointer->z[indx], particlesPointer->vx[indx], particlesPointer->vy[indx], particlesPointer->vz[indx]);
   } else {
     particlesPointer->hitWall[indx] = 1.0;
     gitr_precision normal[3] = {boundaryVector[nearest_boundary_index].a, boundaryVector[nearest_boundary_index].b, boundaryVector[nearest_boundary_index].c};
     gitr_precision reflection_dir[3];
-    printf("temp_position_xyz : %f %f %f\n", temp_position_xyz[0], temp_position_xyz[1], temp_position_xyz[2]);
+    // printf("temp_position_xyz : %f %f %f\n", temp_position_xyz[0], temp_position_xyz[1], temp_position_xyz[2]);
     reflectDirection(p1, temp_position_xyz, normal, reflection_dir);
     reflectParticle(indx, temp_position_xyz, reflection_dir);
     particlesPointer->distTraveled[indx] += nearest_boundary_distance;
     particlesPointer->surfaceHit[indx] = nearest_boundary_index;
-    std::cout << "Particle reflected" << std::endl;
-    std::cout << "nearest_boundary_index : " << nearest_boundary_index << std::endl;
+    // std::cout << "Particle reflected" << std::endl;
+    // std::cout << "nearest_boundary_index : " << nearest_boundary_index << std::endl;
+
+        printf(" reflected particle positions and velocities : %f %f %f %f %f %f\n", particlesPointer->x[indx], particlesPointer->y[indx], particlesPointer->z[indx], particlesPointer->vx[indx], particlesPointer->vy[indx], particlesPointer->vz[indx]);
+
 
   }
 }
@@ -90,11 +94,10 @@ void geometryCheck::reflectParticle(std::size_t indx, const gitr_precision refle
   particlesPointer->y[indx] = reflection_point[1] + small_step * reflection_dir[1];
   particlesPointer->z[indx] = reflection_point[2] + small_step * reflection_dir[2];
 
-  printf("Particle position after reflection: %g %g %g\n", particlesPointer->x[indx], particlesPointer->y[indx], particlesPointer->z[indx]);
-
-  particlesPointer->vx[indx] = reflection_dir[0] * particlesPointer->v[indx];
-  particlesPointer->vy[indx] = reflection_dir[1] * particlesPointer->v[indx];
-  particlesPointer->vz[indx] = reflection_dir[2] * particlesPointer->v[indx];
+  printf(" particle velocities before reflection 
+  particlesPointer->vx[indx] = -reflection_dir[0] * particlesPointer->v[indx];
+  particlesPointer->vy[indx] = -reflection_dir[1] * particlesPointer->v[indx];
+  particlesPointer->vz[indx] = -reflection_dir[2] * particlesPointer->v[indx];
 }
 
 
@@ -118,10 +121,10 @@ bool geometryCheck::isIntersected(const gitr_precision p0[3], const gitr_precisi
     for (int i = 0; i < 3; i++) {
       intersectionPoint[i] = p0[i] + t * (p1[i] - p0[i]);
     }
-
+    // printf(" intersection true!");
     return true;
   }
-
+  // printf(" intersection false!");
   return false;
 }
 

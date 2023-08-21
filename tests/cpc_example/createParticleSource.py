@@ -1,4 +1,3 @@
-
 #!/bin/env python
 #Copyright (C) 2023, GITRpy contributors
 #Authors: Abdou Diaw
@@ -10,7 +9,6 @@ import os
 import netCDF4 as nc
 import numpy as np
 from periodictable import oxygen, hydrogen, tungsten, deuterium, helium, carbon
-from scipy.constants import m_p, k as kB
 
 def createParticleSourceFile(filename, data_dict):
     """
@@ -85,37 +83,25 @@ def readParticleSourceFile(filename):
 
 if __name__ == "__main__":
     filename = "input/particleSource.nc"
-    te = 10.0
-    ti = 10.0
+    te = 20.0
+    ti = 20.0
     material1  = carbon
     material2 = oxygen
 
     # Domain:
-    xmin, xmax =  0,0 #-0.00149994, 0.00149994
-    ymin, ymax = 0,0 #0,0 #-0.00149994, 0.00149994
-    zmin, zmax =0.01,0.02 # -0.008065992, 0.00299997
-
-
-#    xmin, xmax =  -0.000549994, 0.000549994
-#    ymin, ymax = -0.000549994, 0.000549994
-#    zmin, zmax =  -0.005065992, 0.00199997
-    
-
-#    xmin, xmax =  -0.011, 0.01
-#    ymin, ymax = -0.011, 0.01
-#    zmin, zmax =  0.0149994, 0.02
-    
-    
+    xmin = 0.01
+    xmax = 0.01
+    ymin = 0.01
+    ymax =  0.05
+    zmin = 0.05
+    zmax = 0.05
     Z1=material1.number
+
     Z2=material2.number
-    
     A1=material1.mass
     A2=material2.mass
-    vth1 = np.sqrt(11600.0*kB*te/(m_p*A1))
-    vth2 = np.sqrt(11600.0*kB*ti/(m_p*A2))
-    
-    print("vth1", vth1, "vth2", vth2)
-#    exit()
+    vth1 = np.sqrt(1.602e-19*te/(1.67e-27*A1))
+    vth2 = np.sqrt(1.602e-19*ti/(1.67e-27*A2))
     nParticles = int(100)
     data_dict = {}
     data_dict['nParticles'] = nParticles
@@ -140,28 +126,42 @@ if __name__ == "__main__":
             data_dict['charge'][i] = 1 #material1.number
             data_dict['mass'][i] = material1.mass
             data_dict['IonizationState'][i] = int(material1.number)
-            data_dict['materialName'][i] = str('W')
-            print("material1.symbol ", material1.symbol )
+            data_dict['materialName'][i] ='C'
+   
             data_dict['impurity_id'][i] = i
             data_dict['x'][i] = np.random.uniform(xmin,xmax)
             data_dict['y'][i] = np.random.uniform(ymin,ymax)
             data_dict['z'][i] = np.random.uniform(zmin,zmax)
-            data_dict['vx'][i] = np.random.normal() * vth1
-            data_dict['vy'][i] = np.random.normal() * vth1
-            data_dict['vz'][i] = np.random.normal() * vth1
+ 
+            vn = vth1  * np.sqrt(-np.log(np.random.uniform(0, 1)))
+            vr = vth1 * np.sqrt(-np.log(np.random.uniform(0, 1)))
+            theta1  = 2 * np.pi * np.random.uniform(0, 1)
+            theta2 = 2 * np.pi * np.random.uniform(0, 1)
+
+            data_dict['vx'][i] = np.cos(theta1)*vn
+            data_dict['vy'][i] = np.cos(theta2)*vr  
+            data_dict['vz'][i] = np.sin(theta2)*vr
+
         else:
             data_dict['charge'][i] = 1
             data_dict['mass'][i] = material2.mass
             data_dict['IonizationState'][i] = int(material2.number)
-            data_dict['materialName'][i] = str('O') #'W' # material2.symbol
-            print("material2.symbol ", material2.symbol )
+            data_dict['materialName'][i] = 'O'
             data_dict['impurity_id'][i] = i
+
             data_dict['x'][i] = np.random.uniform(xmin,xmax)
             data_dict['y'][i] = np.random.uniform(ymin,ymax)
             data_dict['z'][i] = np.random.uniform(zmin,zmax)
-            data_dict['vx'][i] = np.random.normal() * vth2
-            data_dict['vy'][i] = np.random.normal() * vth2
-            data_dict['vz'][i] = np.random.normal() * vth2
+
+            vn = vth2  * np.sqrt(-np.log(np.random.uniform(0, 1)))
+            vr = vth2 * np.sqrt(-np.log(np.random.uniform(0, 1)))
+            theta1  = 2 * np.pi * np.random.uniform(0, 1)
+            theta2 = 2 * np.pi * np.random.uniform(0, 1)
+
+            data_dict['vx'][i] = np.cos(theta1)*vn
+            data_dict['vy'][i] = np.cos(theta2)*vr  
+            data_dict['vz'][i] = np.sin(theta2)*vr
+
     createParticleSourceFile(filename, data_dict)
 #
 #    # Create to particles species with same number and different mass and charge
@@ -179,8 +179,7 @@ if __name__ == "__main__":
 #        data_dict['vz'][i] = np.random.normal(0,vth2)
 #    createParticleSourceFile(filename, data_dict)
     
-
+#
 #data = nc.Dataset('OW.nc', "r")
 #print(data['x'][:])
 ##print(data)
-

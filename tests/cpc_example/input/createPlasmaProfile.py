@@ -70,8 +70,8 @@ def readParticleSourceFile(filename):
 # test createParticleSourceFile
 if __name__ == "__main__":
     filename = "plasmaProfile.nc"
-    te = 1.0
-    ti = 1.0
+    te = 20.0
+    ti = 20.0
     material1  = oxygen
     material2 = tungsten
 
@@ -99,9 +99,9 @@ if __name__ == "__main__":
         data_dict['te'][i] = te
         data_dict['ni'][i] = 1e19
         data_dict['ti'][i] = ti
-        data_dict['vx'][i] = np.random.normal(0,vth1)
-        data_dict['vy'][i] = np.random.normal(0,vth1)
-        data_dict['vz'][i] = np.random.normal(0,vth1)
+        data_dict['vx'][i] = 0
+        data_dict['vy'][i] = 0
+        data_dict['vz'][i] = -200
 
     createParticleSourceFile(filename, data_dict)
 
