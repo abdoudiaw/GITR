@@ -23,7 +23,14 @@ gitr_precision CouletteManfredi(gitr_precision distance, gitr_precision alpha ) 
 }
 
     gitr_precision BrooksModel(gitr_precision distance, gitr_precision alpha, gitr_precision larmorRadius, gitr_precision Te) {
-    gitr_precision Vmps = log( abs(alpha )* 180.0 / M_PI) * _boltz * 11600.0* Te / e_charge;
+     gitr_precision Vmps = 0.0;
+    gitr_precision eps = 1.e-3; 
+    if (alpha < eps) {
+        Vmps = 0.0;
+    }
+    else {
+        Vmps = log( abs(alpha )* 180.0 / M_PI) * _boltz * 11600.0* Te / e_charge;
+    }
     gitr_precision result = Vmps * std::exp( - distance / larmorRadius) / larmorRadius;
 
     return result;

@@ -96,13 +96,6 @@ void vectorCrossProduct(gitr_precision A[], gitr_precision B[], gitr_precision C
 }
 
 
-
-//getSheathElectricField: this function needs to move into a separate file; it does a lot of things; simplify; 
-// have a function to calculate the distance and normal of a given point p0 to a boundary.
-
-// getSheathElectricField(position[0], position[1], position[2], E, boundaryVector, nLines, closestBoundaryIndex, gitr_flags->USE3DTETGEOM, particlesPointer->amu[indx], particlesPointer->charge[indx], B );
-
-
 CUDA_CALLABLE_MEMBER
 gitr_precision getSheathElectricField ( gitr_precision x0, gitr_precision y, gitr_precision z, gitr_precision E[], Boundary *boundaryVector, int nLines,
          int&  closestBoundaryIndex, int use_3d_geom, gitr_precision mass, gitr_precision charge, gitr_precision Bmagnitude)
@@ -504,17 +497,13 @@ top_limit = nLines;
     else {
         // Call sheath model
         gitr_precision phiNormalizationFactor =  11600.0*gitr_constants::boltz/boundaryVector[minIndex].te/gitr_constants::p_mass;
-        gitr_precision distance2surface = abs(minDistance/boundaryVector[minIndex].debyeLength);
-
-        // gitr_precision phi =  CouletteManfredi(minDistance/boundaryVector[minIndex].debyeLength, boundaryVector[minIndex].angle) * phiNormalizationFactor;
-        // gitr_precision E_new  =  CouletteManfredi(abs(minDistance/boundaryVector[minIndex].debyeLength), boundaryVector[minIndex].angle) * phiNormalizationFactor / boundaryVector[minIndex].debyeLength;
 
         gitr_precision omega_c = charge * gitr_constants::e_charge * Bmagnitude / mass / gitr_constants::p_mass;
         gitr_precision cs = sqrt(gitr_constants::boltz * boundaryVector[minIndex].te * 11600. / mass / gitr_constants::p_mass);
         gitr_precision larmorRadius =  cs / omega_c;
         gitr_precision E_new = BrooksModel(abs(minDistance), boundaryVector[minIndex].angle, larmorRadius, boundaryVector[minIndex].te);
-
         Emag = abs(E_new);
+        // printf ("Emag: %g \n", Emag);
 
     }
     Er = Emag*directionUnitVector[0];

@@ -123,6 +123,8 @@ void elementaryProcesses<T>::operator()(std::size_t indx)
         tion = 1.0 / (RClocal * nlocal);
         if (tlocal == 0.0 || nlocal == 0.0) tion = 1.0e12;
 
+        // printf(" time step = %g, tion = %g, density = %g, temperature = %g, charge = %g\n", dt, tion, nlocal, tlocal, particlesPointer->charge[indx]);
+
         gitr_precision P = exp(-dt / tion);
         gitr_precision P1 = 1.0 - P;
         gitr_precision r1 = get_rand_double(state, indx);
@@ -132,7 +134,7 @@ void elementaryProcesses<T>::operator()(std::size_t indx)
             if (r1 <= P1)
             {
                 particlesPointer->charge[indx] = particlesPointer->charge[indx] + 1;
-                std::cout << "Ionization" << std::endl;
+                // std::cout << "Ionization event!" << std::endl;
             }
         }
         
@@ -140,6 +142,7 @@ void elementaryProcesses<T>::operator()(std::size_t indx)
 
     if (flags->USE_RECOMBINATION > 0)
     {
+    
         gitr_precision dt = particlesPointer->dt[indx];
 
         // Get the data from the cache
@@ -162,7 +165,6 @@ void elementaryProcesses<T>::operator()(std::size_t indx)
         gitr_precision trecomb = 1.0 / (RClocal * nlocal);
         if (tlocal == 0.0 || nlocal == 0.0) trecomb = 1.0e12;
 
-
         gitr_precision P = exp(-dt/trecomb);
         gitr_precision P1 = 1.0-P;
         gitr_precision r1 = get_rand_double(state, indx);
@@ -172,7 +174,7 @@ void elementaryProcesses<T>::operator()(std::size_t indx)
           if(r1 <= P1)
           {
             particlesPointer->charge[indx] = particlesPointer->charge[indx]-1;
-            std::cout << "Recombination" << std::endl;
+            // std::cout << "Recombination event!" << std::endl;
           }
         }
           

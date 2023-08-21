@@ -44,14 +44,14 @@ void storeParticleData(const std::string& base_filename, Particles *particleArra
     f << domain.xmin << ' ' << domain.xmax << '\n';
     f << domain.ymin << ' ' << domain.ymax << '\n';
     f << domain.zmin << ' ' << domain.zmax << '\n';
-    f << "ITEM: ATOMS id type x y z vx vy vz\n";
-    // Write the particle data to the file: id type x y z vx vy vz where type is the material index
-
+    f << "ITEM: ATOMS id type x y z vx vy vz charge mass\n";
+        
     for (int i = 0; i < nP; i++) {
       f << i+1  << "  " << materialIndex[particleArray->materialName[i]] << "  " 
                 << particleArray->x[i] << "  " << particleArray->y[i]
                 << "  " << particleArray->z[i] <<  "  " << particleArray->vx[i]
-                << "  " << particleArray->vy[i] << "  " << particleArray->vz[i] <<  std::endl;
+                << "  " << particleArray->vy[i] << "  " << particleArray->vz[i] 
+                << "  " << particleArray->charge[i] << "  " << particleArray->amu[i] << std::endl;
 
     }
 

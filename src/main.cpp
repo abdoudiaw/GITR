@@ -19,7 +19,6 @@
 #include <thrust/sequence.h>
 #include <thrust/sort.h>
 #include <thrust/transform.h>
-#include <indicators/progress_bar.hpp>
 
 #include "array.h"
 #include "boundaryInit.h"
@@ -38,7 +37,7 @@
 #include "dump.h"
 #include "getParticleData.h"
 #include "progressBar.h"
-
+#include "boundaryConditions.h"
 
 #ifdef __CUDACC__
 #include <curand.h>
@@ -296,7 +295,9 @@ flowVz = std::get<9>(backgroundPlasma);
 
   pusher pusher0( particleArray, boundaries.data(), nLines, nR_Bfield, nZ_Bfield, bfieldGridr.data(), &bfieldGridz.front(), &br.front(), &bz.front(), &by.front(), gitr_flags);
 
-  geometryCheck geometryCheck0(particleArray, nLines, &boundaries[0], gitr_flags);
+  // geometryCheck geometryCheck0(particleArray, nLines, &boundaries[0], gitr_flags);
+
+  boundaryConditions boundaryConditions0(particleArray);
 
   backgroundCollisionsMCC backgroundCollisionsMCC0(particleArray, &state1.front(), flowVr[0], flowVz[0], flowVt[0], ne[0], ni[0], ti[0], te[0], background_Z, background_amu);
 
@@ -339,17 +340,16 @@ flowVz = std::get<9>(backgroundPlasma);
   {
       ProgressBar progressBar(nT);
       for (int tt = 0; tt < nT; tt++) {
-
           thrust::for_each(thrust::device, particleBegin, particleEnd, 
               [&] __device__ (auto& particle) {
                   if (ionization > 0 || recombination > 0) elementaryProcesses0(particle);
                   if (backgroundCollisions > 0) backgroundCollisionsMCC0(particle);
-                  // if (surface_model > 0) surfaceReactions0(particle);
+          //         // if (surface_model > 0) surfaceReactions0(particle);
                   pusher0(particle);
-                  geometryCheck0(particle);
+                  boundaryConditions0(particle);
               }
           );
-
+        // }
           // Store particle data
           if (tt % subSampleFac == 0) {
               storeParticleData(outputFileName, particleArray, nP, domain, tt);
@@ -358,17 +358,16 @@ flowVz = std::get<9>(backgroundPlasma);
           progressBar.increment(); // Update progress bar
       }
       progressBar.finish();
+
   }
 
   #if __CUDACC__
       cudaDeviceSynchronize();
   #endif
-
   auto finish_clock = gitr_time::now();
   auto fs = std::chrono::duration_cast<std::chrono::seconds>(finish_clock - start_clock);
 
   std::cout << "Time taken is " << fs.count() << " secs" << std::endl;
   std::cout << "Time taken per step is " << fs.count() / static_cast<float>(nT) << " secs" << std::endl;
-
   return 0;
 }
