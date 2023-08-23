@@ -1,5 +1,5 @@
-#ifndef _SURFACE_
-#define _SURFACE_
+#ifndef _REFLECTIVEBOUNDARYCONDITIONS_
+#define _REFLECTIVEBOUNDARYCONDITIONS_
 
 #ifdef __CUDACC__
 #define CUDA_CALLABLE_MEMBER __host__ __device__
@@ -26,18 +26,16 @@ typedef double gitr_precision;
 typedef float gitr_precision;
 #endif
 
- CUDA_CALLABLE_MEMBER
- gitr_precision interp2d(gitr_precision x, gitr_precision z, int nx, int nz,
-                         const std::vector<double>& gridx, const std::vector<double>& gridz, const std::vector<double>& data);
-struct surfaceReactions {
+struct reflectiveBoundaryConditions {
     Particles * particles;
     int nLines;
     int nSurfaces;
     Boundary * boundaryVector;
     Flags * flags;
 
-    surfaceReactions(Particles* _particles, 
-            int _nLines, int _nSurfaces,
+    reflectiveBoundaryConditions(Particles* _particles, 
+            int _nLines,
+            int _nSurfaces,
             Boundary * _boundaryVector,
             Flags * _flags);
 

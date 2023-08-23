@@ -109,14 +109,7 @@ struct collisions {
   std::mt19937* state;
 #endif
 
-  collisions(Particles* _particlesPointer, gitr_precision _dt,
-#ifdef __CUDACC__
-                   curandState* _state,
-#else
-                   std::mt19937* _state,
-#endif
-                   int _Ncell, gitr_precision* _cellDensity, gitr_precision* _cellTemperature,
-                   gitr_precision _background_Z, gitr_precision _background_amu)
+  collisions(Particles* _particlesPointer, gitr_precision _dt, int _Ncell, gitr_precision* _cellDensity, )
       : particlesPointer(_particlesPointer),
         dt(_dt),
         Ncell(_Ncell),

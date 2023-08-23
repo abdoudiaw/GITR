@@ -39,10 +39,7 @@ struct geometryCheck {
   // void updateParticlePosition(std::size_t indx, double x, double y, double z, bool flag) const;
   bool isIntersected(const gitr_precision p0[3], const gitr_precision p1[3], const Boundary& boundary, gitr_precision intersectionPoint[3]) const;
   bool isPointInsideTriangle( gitr_precision p[3], const Boundary& boundary) const;
-  // void reflectDirection(const gitr_precision p1[3], const gitr_precision intersectionPoint[3], const gitr_precision normal[3], gitr_precision reflection_dir[3]) const; 
   void reflectDirection(const gitr_precision velocity[3], const gitr_precision intersectionPoint[3], const gitr_precision normal[3], gitr_precision reflection_dir[3]) const ;
-  void reflectParticle(std::size_t indx, const gitr_precision reflection_point[3], const gitr_precision reflection_dir[3]) const;
-void periodicBoundaryConditions(std::size_t indx,  gitr_precision temp_position_xyz[3]) const;
   void vectorSubtract(const gitr_precision a[3], const gitr_precision b[3], gitr_precision result[3]) const;
   gitr_precision vectorDotProduct(const gitr_precision a[3], const gitr_precision b[3]) const;
   void vectorScale(const gitr_precision a[3], const gitr_precision scalar, gitr_precision result[3]) const;

@@ -22,6 +22,8 @@
 #endif
 
 #include "Particles.h"
+#include "boundaryConditions.h"
+
 
 #if USE_DOUBLE
 typedef double gitr_precision;
@@ -31,15 +33,16 @@ typedef float gitr_precision;
 
 class boundaryConditions {
 public:
-    boundaryConditions(Particles *_particlesPointer);
+    boundaryConditions(Particles *_particlesPointer, const Domain& domain);
     CUDA_CALLABLE_MEMBER void operator()(std::size_t indx);
 
 private:
     Particles *particlesPointer;
+    Domain domain;
 };
 
-boundaryConditions::boundaryConditions(Particles *_particlesPointer)
-    : particlesPointer(_particlesPointer)
+boundaryConditions::boundaryConditions(Particles *_particlesPointer, const Domain& _domain)
+    : particlesPointer(_particlesPointer), domain(_domain)
 {}
 
 CUDA_CALLABLE_MEMBER    
@@ -47,12 +50,13 @@ void boundaryConditions::operator()(std::size_t indx) {
     gitr_precision position[3] = {particlesPointer->x[indx], particlesPointer->y[indx], particlesPointer->z[indx]};
 
     gitr_precision eps = 1e-6;
-    gitr_precision xmin = 0;
-    gitr_precision xmax = 0.0919991;
-    gitr_precision ymin = 0;
-    gitr_precision ymax = 0.0919991;
-    gitr_precision zmin = 0;
-    gitr_precision zmax = 0.0919991;
+    gitr_precision xmin =domain.xmin;
+    gitr_precision xmax =domain.xmax;
+    gitr_precision ymin =domain.ymin;
+    gitr_precision ymax =domain.ymax;
+    gitr_precision zmin =domain.zmin;
+    gitr_precision zmax =domain.zmax;
+    
 
     // apply conditions
     if (position[0] < xmin) {

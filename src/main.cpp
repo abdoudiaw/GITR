@@ -37,8 +37,9 @@
 #include "dump.h"
 #include "getParticleData.h"
 #include "progressBar.h"
+#include "reflectiveBoundaryConditions.h"
+#include "Surfaces.h"
 #include "boundaryConditions.h"
-
 #ifdef __CUDACC__
 #include <curand.h>
 #include <curand_kernel.h>
@@ -79,6 +80,7 @@ int main(int argc, char **argv, char **envp) {
   int recombination = use.get< int >( use::recombination );
   int backgroundCollisions = use.get< int >( use::backgroundCollisions );
   int surface_model = use.get< int >( use::surface_model );
+  printf(" surface_model %d \n", surface_model);
 
   // Set default processes per node to 1
   int ppn = 1;
@@ -163,11 +165,14 @@ gitr_precision background_Z = 0.0, background_amu = 0.0;
      }
  });
 
+  // 
  sim::Array<Boundary> boundaries(nLines + 1, Boundary());
  performActionIfWorldRankZero([&](){
    nSurfaces = importGeometry(cfg_geom, boundaries, use_3d_geom );
    std::cout << "Starting Boundary Init... nSurfaces " << nSurfaces << std::endl;
  });
+
+  //  auto surfaces = new Surfaces(nSurfaces);
 
   // Background Plasma Temperature Initialization
   int nR_Temp = 1, nY_Temp = 1, nZ_Temp = 1, n_Temp = 1;
@@ -232,9 +237,22 @@ flowVz = std::get<9>(backgroundPlasma);
    gitr_precision x, y, z, vx, vy, vz, amu, Z, charge;
    std::string materialName;
    sim::Array<gitr_precision>  px(nP), py(nP), pz(nP), pvx(nP), pvy(nP), pvz(nP),  pZ(nP), pamu(nP), pcharge(nP);
-   sim::Array<std::string> pmaterialName(nP);
-   auto particleArray = new Particles(nP,1,cfg,gitr_flags);
-   initializeParticleArray(particleData, particleArray, px, py, pz, pvx, pvy, pvz, pZ, pamu, pcharge, dt, pmaterialName);
+    sim::Array<std::string> pmaterialName(nP);
+    auto particleArray = new Particles(nP, 1, cfg, gitr_flags);
+    initializeParticleArray(particleData, particleArray, px, py, pz, pvx, pvy, pvz, pZ, pamu, pcharge, dt, pmaterialName);
+
+    // print the number of particles we have
+    // get all names of materials
+    std::set<std::string> materialNames;
+    for (int i = 0; i < nP; i++) {
+        materialNames.insert(pmaterialName[i]);
+        printf("Particle %d id mass %g charge %g ionization  %g material name %s\n", i, pamu[i], pZ[i], pcharge[i], pmaterialName[i].c_str());
+    }
+
+  // get unique names of materials
+  std::vector<std::string> uniqueMaterialNames(materialNames.begin(), materialNames.end());
+
+  //  printf(" Simulating %d particles \n", nP, " material names string ", uniqueMaterialNames[0].c_str());
 
 // 
   sim::Array<int> nPPerRank(world_size, 0), pStartIndx(world_size, 0), pDisplacement(world_size, 0), pHistPerNode(world_size, 0), nActiveParticlesOnRank(world_size, 0);
@@ -295,17 +313,19 @@ flowVz = std::get<9>(backgroundPlasma);
 
   pusher pusher0( particleArray, boundaries.data(), nLines, nR_Bfield, nZ_Bfield, bfieldGridr.data(), &bfieldGridz.front(), &br.front(), &bz.front(), &by.front(), gitr_flags);
 
-  // geometryCheck geometryCheck0(particleArray, nLines, &boundaries[0], gitr_flags);
-
-  boundaryConditions boundaryConditions0(particleArray);
+  geometryCheck geometryCheck0(particleArray, nLines, &boundaries[0], gitr_flags);
 
   backgroundCollisionsMCC backgroundCollisionsMCC0(particleArray, &state1.front(), flowVr[0], flowVz[0], flowVt[0], ne[0], ni[0], ti[0], te[0], background_Z, background_amu);
 
   elementaryProcesses<rand_type> elementaryProcesses0( particleArray, &state1.front(), nR_Dens, nZ_Dens, &DensGridr.front(),
-       &DensGridz.front(), &ne.front(), nR_Temp, nZ_Temp, &TempGridr.front(),
-       &TempGridz.front(), &te.front(), gitr_flags );
+        &DensGridz.front(), &ne.front(), nR_Temp, nZ_Temp, &TempGridr.front(),
+        &TempGridz.front(), &te.front(), gitr_flags );
 
-//  surfaceReactions surfaceReactions0(  particleArray, &state1.front(), nLines, &boundaries[0], surfaces, gitr_flags);
+  surfaceReactions surfaceReactions0(  particleArray, nLines, nSurfaces, &boundaries[0], gitr_flags);
+
+  reflectiveBoundaryConditions reflectiveBoundaryConditions0(  particleArray, nLines, nSurfaces, &boundaries[0], gitr_flags);
+
+
 
  auto start_clock = gitr_time::now();
  std::cout << "Starting main loop" << std::endl;
@@ -318,7 +338,7 @@ flowVz = std::get<9>(backgroundPlasma);
      std::string outputFileName;
      if (world_rank == 0) {
        if (cfg.lookupValue("diagnostics.trackSubSampleFactor", subSampleFac)) {
-         std::cout << "Tracks subsample factor imported " << subSampleFac << std::endl;
+         std::cout << "particle tracking dump frequency! " << subSampleFac << std::endl;
                // import output file name
          cfg.lookupValue("diagnostics.dumpTrajectories", outputFileName);
        } else {
@@ -337,28 +357,34 @@ flowVz = std::get<9>(backgroundPlasma);
      getVariable(cfg, domainBounds + "zmax", domain.zmax);
      getVariable(cfg, domainBounds + "zmin", domain.zmin);
 
+       boundaryConditions boundaryConditions0(particleArray, domain);
+
   {
       ProgressBar progressBar(nT);
       for (int tt = 0; tt < nT; tt++) {
           thrust::for_each(thrust::device, particleBegin, particleEnd, 
               [&] __device__ (auto& particle) {
                   if (ionization > 0 || recombination > 0) elementaryProcesses0(particle);
-                  if (backgroundCollisions > 0) backgroundCollisionsMCC0(particle);
-          //         // if (surface_model > 0) surfaceReactions0(particle);
+                  // if (backgroundCollisions > 0) backgroundCollisionsMCC0(particle);
                   pusher0(particle);
-                  boundaryConditions0(particle);
+                  geometryCheck0(particle);
+                  // surfaceReactions0(particle);
+                  // boundaryConditions0(particle); 
+
+              // if (surface_model > 0)   surfaceReactions0(particle);
+              // if (surface_model == 0) {
+              //      reflectiveBoundaryConditions0(particle);
+              //   }
               }
           );
-        // }
           // Store particle data
           if (tt % subSampleFac == 0) {
+            printf("tt %d \n", tt);
               storeParticleData(outputFileName, particleArray, nP, domain, tt);
           }
-
           progressBar.increment(); // Update progress bar
       }
       progressBar.finish();
-
   }
 
   #if __CUDACC__

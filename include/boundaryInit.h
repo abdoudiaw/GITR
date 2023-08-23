@@ -111,8 +111,8 @@ struct boundary_init {
         b.potential = sheathFactor*b.te;
 
     
-     std::cout << "Surface number " << b.surfaceNumber << " has te "  << b.te << " and potential " << b.potential << " ne " << b.ne
-        << " theta " << b.angle << std::endl;
+    //  std::cout << "Surface number " << b.surfaceNumber << " has te "  << b.te << " and potential " << b.potential << " ne " << b.ne
+    //     << " theta " << b.angle << std::endl;
     
     }	
 };

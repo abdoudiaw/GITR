@@ -1,15 +1,5 @@
-
 #ifndef _SURFACES_
 #define _SURFACES_
-
-#ifdef __CUDACC__
-#define CUDA_CALLABLE_MEMBER __host__ __device__
-#else
-#define CUDA_CALLABLE_MEMBER
-#endif
-
-#include "array.h"
-#include <cstdlib>
 
 #ifdef __CUDACC__
 #include <thrust/host_vector.h>
@@ -17,71 +7,50 @@
 #include <thrust/copy.h>
 #include <thrust/random.h>
 #include <curand_kernel.h>
+#define CUDA_CALLABLE_MEMBER __host__ __device__
+#else
+#define CUDA_CALLABLE_MEMBER
 #endif
 
+#include <cstdlib>
 #include <random>
 #include <string>
+#include "array.h"
 
 #if USE_DOUBLE
-typedef double gitr_precision;
+using gitr_precision = double;
 #else
-typedef float gitr_precision;
+using gitr_precision = float;
 #endif
 
 class Surfaces : public ManagedAllocation {
-public: 
-  int nSurfaces;  
-  int nE;
-  int nA;
-  gitr_precision E0;
-  gitr_precision E;
-  gitr_precision A0;
-  gitr_precision A;
-  gitr_precision dE;
-  gitr_precision dA;
-  gitr_precision bindingEnergy;
-  sim::Array<gitr_precision> sumParticlesStrike;
-  sim::Array<gitr_precision> gridE;
-  sim::Array<gitr_precision> gridA;
-  sim::Array<gitr_precision> sumWeightStrike;
-  sim::Array<gitr_precision> grossDeposition;
-  sim::Array<gitr_precision> grossErosion;
-  sim::Array<gitr_precision> aveSputtYld;
-  sim::Array<gitr_precision> sputtYldCount;
-  sim::Array<gitr_precision> energyDistribution;
-  sim::Array<gitr_precision> sputtDistribution;
-  sim::Array<gitr_precision> reflDistribution;
-  std::string materialName;
+public:
+    int nSurfaces;  
+    int nE;
+    int nA;
 
-  CUDA_CALLABLE_MEMBER
-  void setSurface(int nE, gitr_precision E0, gitr_precision E, int nA, gitr_precision A0, gitr_precision A, gitr_precision bindingEnergy, const std::string& materialName) {
-    this->bindingEnergy = bindingEnergy;
-    this->materialName = materialName;
-    this->nE = nE;
-    this->E0 = E0;
-    this->E = E;
-    this->nA = nA;
-    this->A0 = A0;
-    this->A = A;
-    this->dE = (E - E0) / static_cast<gitr_precision>(nE);
-    this->dA = (A - A0) / static_cast<gitr_precision>(nA);
-    for (int i = 0; i < nE; i++) {
-      this->gridE[i] = E0 + static_cast<gitr_precision>(i) * dE;
-    }
 
-    for (int i = 0; i < nA; i++) {
-      this->gridA[i] = A0 + static_cast<gitr_precision>(i) * dA;
-    }
-  };
+    sim::Array<gitr_precision> sumParticlesStrike;
+    sim::Array<gitr_precision> sumWeightStrike;
+    sim::Array<gitr_precision> grossDeposition;
+    sim::Array<gitr_precision> grossErosion;
+    sim::Array<gitr_precision> aveSputtYld;
+    sim::Array<gitr_precision> sputtYldCount;
+    sim::Array<gitr_precision> energyDistribution;
+    sim::Array<gitr_precision> sputtDistribution;
+    sim::Array<gitr_precision> reflDistribution;
+    sim::Array<gitr_precision> gridE;
+    sim::Array<gitr_precision> gridA;
 
-  CUDA_CALLABLE_MEMBER
-  Surfaces(std::size_t nS, std::size_t nE, std::size_t nA) :
-    sumParticlesStrike{nS, 0}, gridE{nE, 0.0}, gridA{nA, 0.0},
-    sumWeightStrike{nS, 0.0}, grossDeposition{nS, 0.0},
-    grossErosion{nS, 0.0}, aveSputtYld{nS, 0.0}, sputtYldCount{nS, 0},
-    energyDistribution{nS * nE * nA, 0.0}, sputtDistribution{nS * nE * nA, 0.0},
-    reflDistribution{nS * nE * nA, 0.0} {};
+    std::string materialName;
 
+    CUDA_CALLABLE_MEMBER
+    Surfaces(std::size_t nSurfaces, std::size_t nE, std::size_t nA) :
+        sumParticlesStrike{nSurfaces, 0}, gridE{nE, 0.0}, gridA{nA, 0.0},
+        sumWeightStrike{nSurfaces, 0.0}, grossDeposition{nSurfaces, 0.0},
+        grossErosion{nSurfaces, 0.0}, aveSputtYld{nSurfaces, 0.0}, sputtYldCount{nSurfaces, 0},
+        energyDistribution{nSurfaces * nE * nA, 0.0}, sputtDistribution{nSurfaces * nE * nA, 0.0},
+        reflDistribution{nSurfaces * nE * nA, 0.0} {};
 };
 
 #endif

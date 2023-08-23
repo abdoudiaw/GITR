@@ -1,8 +1,8 @@
 #!/bin/env python
-#Copyright (C) 2023, GITRpy contributors
-#Authors: Abdou Diaw
+#Copyright (C) 2023, GITR contributors
+#Authors: Diaw et al
 """
-This module is part of GITRpy (Global Impurity TRansport in Python) code.
+This module is part of GITR (Global Impurity TRanspor) code.
 It generates a netCDF file containing all impurities data.
 """
 import os
@@ -79,9 +79,28 @@ def readParticleSourceFile(filename):
     return data_dict
 
 #
+def random_point_in_sphere(radius):
+    """Generate a random point inside a unit sphere."""
+    # Random distance from center
+    r = radius * (np.random.random() ** (1/3))
+    
+    # Random polar angle (from the vertical axis)
+    theta = np.arccos(2 * np.random.random() - 1)
+    
+    # Random azimuthal angle (around the vertical axis)
+    phi = 2 * np.pi * np.random.random()
+
+    # Convert spherical to Cartesian coordinates
+    x = r * np.sin(theta) * np.cos(phi)
+    y = r * np.sin(theta) * np.sin(phi)
+    z = r * np.cos(theta)
+
+    return x, y, z
+
 
 
 if __name__ == "__main__":
+
     filename = "input/particleSource.nc"
     te = 20.0
     ti = 20.0
@@ -89,12 +108,25 @@ if __name__ == "__main__":
     material2 = oxygen
 
     # Domain:
-    xmin = 0.01
-    xmax = 0.01
-    ymin = 0.01
-    ymax =  0.05
-    zmin = 0.05
-    zmax = 0.05
+#    xmin = 0.01
+#    xmax = 0.01
+#    ymin = 0.01
+#    ymax =  0.01
+#    zmin = 0.000045
+#    zmax = 0.005
+    xmin = 0.0001
+    xmax = 0.06
+    ymin = 0.0001
+    ymax =  0.08
+    zmin = 0.0001
+    zmax = 0.06
+    
+        # Using the function to populate data_dict
+    radius = (xmax-xmin)/2  # assuming xmax-xmin = ymax-ymin = zmax-zmin for a sphere
+    center_x = (xmin + xmax) / 2
+    center_y = (ymin + ymax) / 2
+    center_z = (zmin + zmax) / 2
+
     Z1=material1.number
 
     Z2=material2.number
@@ -121,7 +153,6 @@ if __name__ == "__main__":
 
     # Create to particles species with same number and different mass and charge
     for  i in range(0,nParticles):
-#        if i < int(nParticles/2):
         if i < int(nParticles/2):
             data_dict['charge'][i] = 1 #material1.number
             data_dict['mass'][i] = material1.mass
@@ -129,10 +160,10 @@ if __name__ == "__main__":
             data_dict['materialName'][i] ='C'
    
             data_dict['impurity_id'][i] = i
-            data_dict['x'][i] = np.random.uniform(xmin,xmax)
-            data_dict['y'][i] = np.random.uniform(ymin,ymax)
-            data_dict['z'][i] = np.random.uniform(zmin,zmax)
- 
+            x, y, z = random_point_in_sphere(radius)
+            data_dict['x'][i] = x + center_x
+            data_dict['y'][i] = y + center_y
+            data_dict['z'][i] = z + center_z
             vn = vth1  * np.sqrt(-np.log(np.random.uniform(0, 1)))
             vr = vth1 * np.sqrt(-np.log(np.random.uniform(0, 1)))
             theta1  = 2 * np.pi * np.random.uniform(0, 1)
@@ -149,9 +180,11 @@ if __name__ == "__main__":
             data_dict['materialName'][i] = 'O'
             data_dict['impurity_id'][i] = i
 
-            data_dict['x'][i] = np.random.uniform(xmin,xmax)
-            data_dict['y'][i] = np.random.uniform(ymin,ymax)
-            data_dict['z'][i] = np.random.uniform(zmin,zmax)
+            x, y, z = random_point_in_sphere(radius)
+            data_dict['x'][i] = x + center_x
+            data_dict['y'][i] = y + center_y
+            data_dict['z'][i] = z + center_z
+
 
             vn = vth2  * np.sqrt(-np.log(np.random.uniform(0, 1)))
             vr = vth2 * np.sqrt(-np.log(np.random.uniform(0, 1)))

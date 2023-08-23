@@ -56,130 +56,11 @@ void geometryCheck::perform3DTetGeomCheck(std::size_t indx) const {
   } else {
     particlesPointer->hitWall[indx] = 1.0;
     gitr_precision normal[3] = {boundaryVector[nearest_boundary_index].a, boundaryVector[nearest_boundary_index].b, boundaryVector[nearest_boundary_index].c};
-    gitr_precision reflection_dir[3];
-    gitr_precision velocity[3];
-    // velocity[0] = particlesPointer->vx[indx];
-    // velocity[1] = particlesPointer->vy[indx];
-    // velocity[2] = particlesPointer->vz[indx];
-    // reflectDirection(velocity, temp_position_xyz, normal, reflection_dir);
-    // reflectParticle(indx, temp_position_xyz, reflection_dir);
-
-    // call periodic boundary conditions
-    // periodicBoundaryConditions(indx, temp_position_xyz);
-                       // apply periodic boundary conditions
-                       int nP = 20;
-                    gitr_precision eps = 1e-6;
-        gitr_precision xmin = 0;
-        gitr_precision xmax = 0.0919991;
-        gitr_precision ymin = 0;
-        gitr_precision ymax = 0.0919991;
-        gitr_precision zmin = 0;
-        gitr_precision zmax = 0.0919991;
-
-              for (int part=0; part < nP; part++) {
-                  if (particlesPointer->x[part] < xmin) {
-                      particlesPointer->x[part] = xmax - eps;
-                  }
-                  if (particlesPointer->x[part] > xmax) {
-                      particlesPointer->x[part] = xmin + eps;
-                  }
-                  if (particlesPointer->y[part] < ymin) {
-                      particlesPointer->y[part] = ymax - eps;
-                  }
-                  if (particlesPointer->y[part] > ymax) {
-                      particlesPointer->y[part] = ymin + eps;
-                  }
-                  if (particlesPointer->z[part] < zmin) {
-                      particlesPointer->z[part] = zmax - eps;
-                  }
-                  if (particlesPointer->z[part] > zmax) {
-                      particlesPointer->z[part] = zmin + eps;
-                  }
-
-              };
-
-
     particlesPointer->distTraveled[indx] += nearest_boundary_distance;
     particlesPointer->surfaceHit[indx] = nearest_boundary_index;
+    //
   }
 }
-
-__host__ __device__
-void geometryCheck::reflectDirection(const gitr_precision velocity[3], const gitr_precision intersectionPoint[3], const gitr_precision normal[3], gitr_precision reflection_dir[3]) const {
-  gitr_precision incident_dir[3];
-  gitr_precision dot = vectorDotProduct(velocity, normal);
-  vectorScale(normal, 2.0 * dot, reflection_dir);
-  vectorSubtract(velocity, reflection_dir, reflection_dir);
-  vectorNormalize(reflection_dir);
-}
-
-__host__ __device__
-void geometryCheck::reflectParticle(std::size_t indx, const gitr_precision reflection_point[3], const gitr_precision reflection_dir[3]) const {
-    gitr_precision small_step = 1e-06;  // Small step to move the particle away from the wall
-    particlesPointer->x[indx] = reflection_point[0]; //  - small_step * reflection_dir[0];
-    particlesPointer->y[indx] = reflection_point[1]; // - small_step * reflection_dir[1];
-    particlesPointer->z[indx] = reflection_point[2]; // - small_step * reflection_dir[2];
-
-    gitr_precision particle_velocity[3] = {particlesPointer->vx[indx], particlesPointer->vy[indx], particlesPointer->vz[indx]};
-    gitr_precision particle_velocity_magnitude = vectorNorm(particle_velocity);
-
-    // refelct particle usign reflect3
-    reflect3(particle_velocity, reflection_dir);
-    // update particle velocities
-    particlesPointer->vx[indx] = particle_velocity[0];
-    particlesPointer->vy[indx] = particle_velocity[1];
-    particlesPointer->vz[indx] = particle_velocity[2];
-  }
-
-__host__ __device__
-void geometryCheck::reflect3(gitr_precision v[3], const gitr_precision n[3]) const
-{
-  double dot = dot3(v,n);
-  v[0] -= 2.0*dot*n[0];
-  v[1] -= 2.0*dot*n[1];
-  v[2] -= 2.0*dot*n[2];
-}
-
-void geometryCheck::periodicBoundaryConditions(std::size_t indx,  gitr_precision temp_position_xyz[3]) const {
-        gitr_precision eps = 1e-6;
-        gitr_precision xmin = 0;
-        gitr_precision xmax = 0.0919991;
-        gitr_precision ymin = 0;
-        gitr_precision ymax = 0.0919991;
-        gitr_precision zmin = 0;
-        gitr_precision zmax = 0.0919991;
-
-        if (temp_position_xyz[0] < xmin) {
-          temp_position_xyz[0] = xmax - eps;
-        }
-        if (temp_position_xyz[0] > xmax) {
-          temp_position_xyz[0] = xmin + eps;
-        }
-        if (temp_position_xyz[1] < ymin) {
-          temp_position_xyz[1] = ymax - eps;
-        }
-        if (temp_position_xyz[1] > ymax) {
-          temp_position_xyz[1] = ymin + eps;
-        }
-        if (temp_position_xyz[2] < zmin) {
-          temp_position_xyz[2] = zmax - eps;
-        }
-        if (temp_position_xyz[2] > zmax) {
-          temp_position_xyz[2] = zmin + eps;
-        }
-        particlesPointer->x[indx] = temp_position_xyz[0];
-        particlesPointer->y[indx] = temp_position_xyz[1];
-        particlesPointer->z[indx] = temp_position_xyz[2];
-
-}
-  
-
-__host__ __device__
-gitr_precision geometryCheck::dot3(const gitr_precision v1[3], const gitr_precision v2[3]) const
-{
-  return v1[0]*v2[0] + v1[1]*v2[1] + v1[2]*v2[2];
-}
-
 
 __host__ __device__
 bool geometryCheck::isIntersected(const gitr_precision p0[3], const gitr_precision p1[3], const Boundary& boundary, gitr_precision intersectionPoint[3]) const {
@@ -201,7 +82,6 @@ bool geometryCheck::isIntersected(const gitr_precision p0[3], const gitr_precisi
     for (int i = 0; i < 3; i++) {
       intersectionPoint[i] = p0[i] + t * (p1[i] - p0[i]);
     }
-    // printf(" intersection true!");
     return true;
   }
   // printf(" intersection false!");

@@ -1,9 +1,10 @@
 # Link previously defined CMake compilation "targets" together as needed
 
 # link source targets
+target_link_libraries( interpolater thrust )
+target_link_libraries( reflectiveBoundaryConditions )
 target_link_libraries( surfaceReactions )
 target_link_libraries( elementaryProcesses  )
-target_link_libraries( interpolater thrust )
 target_link_libraries( flags libconfig thrust  )
 target_link_libraries( utils libconfig thrust interpolater netcdf  )
 target_link_libraries( utils pusher thrust )
@@ -18,6 +19,7 @@ target_link_libraries( GITR
                       utils
                       sheathModel
                       pusher
+                      reflectiveBoundaryConditions  
                       surfaceReactions
                       geometryCheck
                       cli11

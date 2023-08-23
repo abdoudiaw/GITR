@@ -18,8 +18,9 @@ set(non_gpu_targets
 
 # Conditionally compile as GPU targets
 set(gpu_targets
-    surfaceReactions
     interpolater
+    reflectiveBoundaryConditions
+    surfaceReactions
     elementaryProcesses
     sheathModel
     pusher
