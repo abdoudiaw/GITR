@@ -134,7 +134,7 @@ if __name__ == "__main__":
     A2=material2.mass
     vth1 = np.sqrt(1.602e-19*te/(1.67e-27*A1))
     vth2 = np.sqrt(1.602e-19*ti/(1.67e-27*A2))
-    nParticles = int(100)
+    nParticles = int(10)
     data_dict = {}
     data_dict['nParticles'] = nParticles
     data_dict['charge'] = np.zeros(nParticles)

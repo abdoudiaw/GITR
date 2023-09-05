@@ -58,7 +58,47 @@ void geometryCheck::perform3DTetGeomCheck(std::size_t indx) const {
     gitr_precision normal[3] = {boundaryVector[nearest_boundary_index].a, boundaryVector[nearest_boundary_index].b, boundaryVector[nearest_boundary_index].c};
     particlesPointer->distTraveled[indx] += nearest_boundary_distance;
     particlesPointer->surfaceHit[indx] = nearest_boundary_index;
-    //
+
+    // Apply boundary conditions
+
+    gitr_precision position[3] = {particlesPointer->x[indx], particlesPointer->y[indx], particlesPointer->z[indx]};
+        gitr_precision eps = 1e-6;
+    gitr_precision xmin =0;
+    gitr_precision xmax =0.0919991;
+    gitr_precision ymin =0; 
+    gitr_precision ymax =0.0919991;
+    gitr_precision zmin =0;
+    gitr_precision zmax =0.0919991;
+        // apply conditions
+    if (position[0] < xmin) {
+        position[0] = xmax - eps;
+    }
+    if (position[0] > xmax) {
+        position[0] = xmin + eps;
+    }
+    if (position[1] < ymin) {
+        position[1] = ymax - eps;
+    }
+    if (position[1] > ymax) {
+        position[1] = ymin + eps;
+    }
+    if (position[2] < zmin) {
+        position[2] = zmax - eps;
+    }
+    if (position[2] > zmax) {
+        position[2] = zmin + eps;
+    }
+
+    // update position
+    particlesPointer->x[indx] = position[0];
+    particlesPointer->y[indx] = position[1];
+    particlesPointer->z[indx] = position[2];
+
+
+//    Apply BoundaryConditions.h //
+    // set peridoic boundary conditions
+    // boundaryConditions(particlesPointer, const Domain& _domain)
+
   }
 }
 

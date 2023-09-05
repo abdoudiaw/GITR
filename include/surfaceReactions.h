@@ -26,6 +26,31 @@ typedef double gitr_precision;
 typedef float gitr_precision;
 #endif
 
+CUDA_CALLABLE_MEMBER
+void calculateImpactParameters(gitr_precision& thetaImpact, const gitr_precision particleTrackVector[], const gitr_precision surfaceNormalVector[]);
+
+CUDA_CALLABLE_MEMBER_DEVICE
+void processParticleAfterImpact(int indx, Particles * particles, const int wallHit, gitr_precision& newWeight, const gitr_precision sputteringProb, const gitr_precision totalYR, gitr_precision& eInterpVal, gitr_precision& aInterpVal, gitr_precision weight);
+
+// CUDA_CALLABLE_MEMBER_DEVICE
+// void Reflect (const int& indx, 
+//                 const gitr_precision& newWeight,
+//                 const gitr_precision& eInterpVal,
+//                 const gitr_precision& aInterpVal,
+//                 const gitr_precision& r10,
+//                 Boundary* boundaryVector,
+//                 Particles* particles,
+//                 Flags* flags );
+
+// void Sputter (const int& indx, 
+//                 const gitr_precision& newWeight,
+//                 const gitr_precision& eInterpVal,
+//                 const gitr_precision& aInterpVal,
+//                 const gitr_precision& r10,
+//                 Boundary* boundaryVector,
+//                 Particles* particles,
+//                 Flags* flags );
+
  CUDA_CALLABLE_MEMBER
  gitr_precision interp2d(gitr_precision x, gitr_precision z, int nx, int nz,
                          const std::vector<double>& gridx, const std::vector<double>& gridz, const std::vector<double>& data);

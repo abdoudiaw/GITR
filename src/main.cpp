@@ -240,20 +240,6 @@ flowVz = std::get<9>(backgroundPlasma);
     sim::Array<std::string> pmaterialName(nP);
     auto particleArray = new Particles(nP, 1, cfg, gitr_flags);
     initializeParticleArray(particleData, particleArray, px, py, pz, pvx, pvy, pvz, pZ, pamu, pcharge, dt, pmaterialName);
-
-    // print the number of particles we have
-    // get all names of materials
-    std::set<std::string> materialNames;
-    for (int i = 0; i < nP; i++) {
-        materialNames.insert(pmaterialName[i]);
-        printf("Particle %d id mass %g charge %g ionization  %g material name %s\n", i, pamu[i], pZ[i], pcharge[i], pmaterialName[i].c_str());
-    }
-
-  // get unique names of materials
-  std::vector<std::string> uniqueMaterialNames(materialNames.begin(), materialNames.end());
-
-  //  printf(" Simulating %d particles \n", nP, " material names string ", uniqueMaterialNames[0].c_str());
-
 // 
   sim::Array<int> nPPerRank(world_size, 0), pStartIndx(world_size, 0), pDisplacement(world_size, 0), pHistPerNode(world_size, 0), nActiveParticlesOnRank(world_size, 0);
   int countP = 0;
@@ -313,8 +299,6 @@ flowVz = std::get<9>(backgroundPlasma);
 
   pusher pusher0( particleArray, boundaries.data(), nLines, nR_Bfield, nZ_Bfield, bfieldGridr.data(), &bfieldGridz.front(), &br.front(), &bz.front(), &by.front(), gitr_flags);
 
-  geometryCheck geometryCheck0(particleArray, nLines, &boundaries[0], gitr_flags);
-
   backgroundCollisionsMCC backgroundCollisionsMCC0(particleArray, &state1.front(), flowVr[0], flowVz[0], flowVt[0], ne[0], ni[0], ti[0], te[0], background_Z, background_amu);
 
   elementaryProcesses<rand_type> elementaryProcesses0( particleArray, &state1.front(), nR_Dens, nZ_Dens, &DensGridr.front(),
@@ -356,8 +340,9 @@ flowVz = std::get<9>(backgroundPlasma);
      getVariable(cfg, domainBounds + "ymin", domain.ymin);
      getVariable(cfg, domainBounds + "zmax", domain.zmax);
      getVariable(cfg, domainBounds + "zmin", domain.zmin);
-
+// 
        boundaryConditions boundaryConditions0(particleArray, domain);
+  geometryCheck geometryCheck0(particleArray, nLines, &boundaries[0], gitr_flags);
 
   {
       ProgressBar progressBar(nT);
