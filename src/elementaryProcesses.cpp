@@ -134,7 +134,8 @@ void elementaryProcesses<T>::operator()(std::size_t indx)
             if (r1 <= P1)
             {
                 particlesPointer->charge[indx] = particlesPointer->charge[indx] + 1;
-                // std::cout << "Ionization event!" << std::endl;
+                std::cout << "Ionization event!" << std::endl;
+                printf("particle charge %g", particlesPointer->charge[indx]);
             }
         }
         

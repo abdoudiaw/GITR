@@ -52,7 +52,6 @@ struct GitrConfig {
     int use_ionization;
     int coulomb_collisions;
     int perp_diffusion;
-    int field_aligned_values;
     bool fixed_seeds;
 };
 

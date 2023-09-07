@@ -7,8 +7,7 @@
 #include "flags.h"
 #include "utils.h"
 
-//CUDA_CALLABLE_MEMBER
-//Flags::Flags() : USE_IONIZATION{0} {};
+CUDA_CALLABLE_MEMBER
 bool Flags::initialize_flags(libconfig::Config &cfg,std::string s) 
 {
   std::string base = "flags.";

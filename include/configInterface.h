@@ -183,8 +183,6 @@ class impurity_particle_source final : public config_module_base
   enum : int
   {
     source_material_z, //this is the material in z
-    // ionization,
-    // recombination
   };
 
   impurity_particle_source( class libconfig_string_query const &query,

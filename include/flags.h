@@ -20,18 +20,16 @@ class Flags : public ManagedAllocation
     const bool USE_IONIZATION;
     const bool USE_RECOMBINATION;
     const bool FIXED_SEEDS;
-    const bool USE_ADAPTIVE_DT;
 
     
     CUDA_CALLABLE_MEMBER
     Flags(libconfig::Config &cfg) : 
         USE_IONIZATION{initialize_flags(cfg,"USE_IONIZATION")},
         FIXED_SEEDS{initialize_flags(cfg,"FIXED_SEEDS")},
-       USE_SHEATHEFIELD{initialize_flags(cfg,"USE_SHEATHEFIELD")},
+        USE_SHEATHEFIELD{initialize_flags(cfg,"USE_SHEATHEFIELD")},
         USE3DTETGEOM{initialize_flags(cfg,"USE3DTETGEOM")},
         USE_SURFACEMODEL{initialize_flags(cfg,"USE_SURFACEMODEL")},
-        USE_RECOMBINATION{initialize_flags(cfg,"USE_RECOMBINATION")},
-        USE_ADAPTIVE_DT{initialize_flags(cfg,"USE_ADAPTIVE_DT")} {};
+        USE_RECOMBINATION{initialize_flags(cfg,"USE_RECOMBINATION")} {};
     bool initialize_flags(libconfig::Config &cfg, std::string s);
 };
 #endif

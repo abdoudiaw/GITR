@@ -80,7 +80,6 @@ int main(int argc, char **argv, char **envp) {
   int recombination = use.get< int >( use::recombination );
   int backgroundCollisions = use.get< int >( use::backgroundCollisions );
   int surface_model = use.get< int >( use::surface_model );
-  printf(" surface_model %d \n", surface_model);
 
   // Set default processes per node to 1
   int ppn = 1;
@@ -97,26 +96,23 @@ int main(int argc, char **argv, char **envp) {
   cfg.setAutoConvert(true);
   cfg_geom.setAutoConvert(true);
 
-try {
+  try {
     cfg.readFile(inputFile.c_str());
-} catch (const libconfig::FileIOException &fioex) {
+  } catch (const libconfig::FileIOException &fioex) {
     std::cerr << "I/O error while reading file." << std::endl;
     return(EXIT_FAILURE);
-} catch (const libconfig::ParseException &pex) {
+  } catch (const libconfig::ParseException &pex) {
     std::cerr << "Parse error at " << pex.getFile() << ":" << pex.getLine()
               << " - " << pex.getError() << std::endl;
     return(EXIT_FAILURE);
-}
-auto gitr_flags = new Flags(cfg);
+  }
+  auto gitr_flags = new Flags(cfg);
 
-// exit(0);
+  gitr_precision background_Z = 0.0, background_amu = 0.0;
 
-
-gitr_precision background_Z = 0.0, background_amu = 0.0;
-
- auto performActionIfWorldRankZero = [&](auto action) {
-     if (world_rank == 0) { action(); }
- };
+  auto performActionIfWorldRankZero = [&](auto action) {
+      if (world_rank == 0) { action(); }
+  };
 
  performActionIfWorldRankZero([&](){
      std::cout << "Open configuration file " << input_path << inputFile << std::endl;
@@ -128,12 +124,10 @@ gitr_precision background_Z = 0.0, background_amu = 0.0;
      std::cout << "Successfully staged input and geometry file " << std::endl;
  });
 
-
  performActionIfWorldRankZero([&](){
      getVariable(cfg, "backgroundPlasmaProfiles.Z", background_Z);
      getVariable(cfg, "backgroundPlasmaProfiles.amu", background_amu);
  });
-
 
  int nR_Bfield = 1, nY_Bfield = 1, nZ_Bfield = 1, n_Bfield = 1;
  std::string bfieldCfg = "backgroundPlasmaProfiles.Bfield.";
@@ -207,7 +201,6 @@ flowVr = std::get<7>(backgroundPlasma);
 flowVt = std::get<8>(backgroundPlasma);
 flowVz = std::get<9>(backgroundPlasma);
 
-
 // initialize plasma conditions at the surface boundary
  std::for_each(boundaries.begin(), boundaries.end() - 1,
                boundary_init(background_Z, background_amu, ni.data(), ne.data(), br.data(),
@@ -215,7 +208,7 @@ flowVz = std::get<9>(backgroundPlasma);
 
  gitr_precision dt;
  int nP = 0 , nT = 0;
- gitr_precision max_dt = 1.0e5;
+
  if (world_rank == 0) {
    if (cfg.lookupValue("timeStep.dt", dt) &&
        cfg.lookupValue("timeStep.nT", nT)) {
@@ -226,7 +219,6 @@ flowVz = std::get<9>(backgroundPlasma);
      std::cout << "ERROR: could not get nT, dt, or nP from input file" << std::endl;
    }
  }
-
    // read in particle source
    std::string ncParticleSourceFile;
    getVariable(cfg, "particleSource.ncFileString", ncParticleSourceFile);
@@ -279,7 +271,6 @@ flowVz = std::get<9>(backgroundPlasma);
  sim::Array<rand_type> state1(nParticles);
 #endif
 
-
  if( ionization > 0 || backgroundCollisions > 0 )
    {
      #if USE_CUDA
@@ -307,8 +298,7 @@ flowVz = std::get<9>(backgroundPlasma);
 
   surfaceReactions surfaceReactions0(  particleArray, nLines, nSurfaces, &boundaries[0], gitr_flags);
 
-  reflectiveBoundaryConditions reflectiveBoundaryConditions0(  particleArray, nLines, nSurfaces, &boundaries[0], gitr_flags);
-
+  // reflectiveBoundaryConditions reflectiveBoundaryConditions0(  particleArray, nLines, nSurfaces, &boundaries[0], gitr_flags);
 
 
  auto start_clock = gitr_time::now();
@@ -341,8 +331,8 @@ flowVz = std::get<9>(backgroundPlasma);
      getVariable(cfg, domainBounds + "zmax", domain.zmax);
      getVariable(cfg, domainBounds + "zmin", domain.zmin);
 // 
-       boundaryConditions boundaryConditions0(particleArray, domain);
-  geometryCheck geometryCheck0(particleArray, nLines, &boundaries[0], gitr_flags);
+  boundaryConditions boundaryConditions0(particleArray, domain);
+  // geometryCheck geometryCheck0(particleArray, nLines, &boundaries[0], gitr_flags);
 
   {
       ProgressBar progressBar(nT);
@@ -350,21 +340,15 @@ flowVz = std::get<9>(backgroundPlasma);
           thrust::for_each(thrust::device, particleBegin, particleEnd, 
               [&] __device__ (auto& particle) {
                   if (ionization > 0 || recombination > 0) elementaryProcesses0(particle);
-                  // if (backgroundCollisions > 0) backgroundCollisionsMCC0(particle);
+                  if (backgroundCollisions > 0) backgroundCollisionsMCC0(particle);
                   pusher0(particle);
-                  geometryCheck0(particle);
-                  // surfaceReactions0(particle);
-                  // boundaryConditions0(particle); 
-
-              // if (surface_model > 0)   surfaceReactions0(particle);
-              // if (surface_model == 0) {
-              //      reflectiveBoundaryConditions0(particle);
-              //   }
+                  // geometryCheck0(particle);
+                  // if (surface_model > 0) surfaceReactions0(particle);
+                  boundaryConditions0(particle); 
               }
           );
           // Store particle data
           if (tt % subSampleFac == 0) {
-            printf("tt %d \n", tt);
               storeParticleData(outputFileName, particleArray, nP, domain, tt);
           }
           progressBar.increment(); // Update progress bar
