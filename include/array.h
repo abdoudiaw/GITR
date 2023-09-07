@@ -28,7 +28,7 @@ THE SOFTWARE.
 #include "cuda_runtime.h"
 #endif
 
-#include "managedAllocation.h"
+#include "managed_allocation.h"
 #include <memory>
 #include "device.h"
 #include <cstddef>

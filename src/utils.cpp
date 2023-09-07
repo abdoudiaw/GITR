@@ -1,4 +1,7 @@
 #include "utils.h"
+#include "libconfig.h++"
+//#include "interp2d.hpp"
+//#include "h1.cuh"
 #include <iostream>
 #include <fstream>
 #include <stdlib.h>
@@ -6,8 +9,9 @@
 #include <cstring>
 #include <netcdf.h>
 #include "Boundary.h"
+#include "Particle.h"
 #include "libconfig.h++"
-#include <cstdlib>
+
 #ifdef __CUDACC__
 #include <thrust/host_vector.h>
 #endif
@@ -69,24 +73,109 @@ void checkFlags(libconfig::Config &cfg)
 {
     std::cout << "Checking compatibility of compile flags with input file "
                       << std::endl;
-    const char *flags0[] = {"flags.USE_IONIZATION",
-                            "flags.USE_RECOMBINATION",  
+    const char *flags0[] = {//"flags.USE_CUDA",
+                            //"flags.USE_MPI",
+                            "flags.USE_IONIZATION",
                             "flags.USERECOMBINATION","flags.USEPERPDIFFUSION",
-                            "flags.USECOULOMBCOLLISIONS","flags.USESURFACEMODEL",
+                            "flags.USECOULOMBCOLLISIONS",
+                            "flags.USETHERMALFORCE","flags.USESURFACEMODEL",
                             "flags.USESHEATHEFIELD","flags.BIASED_SURFACE",
                             "flags.USEPRESHEATHEFIELD","flags.BFIELD_INTERP",
-                            "flags.EFIELD_INTERP",
+                            "flags.LC_INTERP","flags.GENERATE_LC", "flags.EFIELD_INTERP",
                             "flags.PRESHEATH_INTERP","flags.DENSITY_INTERP",
                             "flags.TEMP_INTERP",
-                            "flags.FLOWV_INTERP",
-                            "flags.FIXEDSEEDS",
-                            "flags.PARTICLESEEDS","flags.GEOM_TRACE",
-                            "flags.PARTICLE_TRACKS",
-                            "flags.PARTICLE_SOURCE_FILE","flags.USE3DTETGEOM",
-                            "flags.FLUX_EA"};
-                       
+                            "flags.FLOWV_INTERP","flags.GRADT_INTERP",
+                            "flags.ODEINT","flags.FIXEDSEEDS",
+                            "flags.PARTICLESEEDS","flags.GEOM_TRACE","flags.GEOM_HASH",
+                            "flags.GEOM_HASH_SHEATH","flags.PARTICLE_TRACKS",
+                            "flags.PARTICLE_SOURCE_SPACE",
+                            "flags.PARTICLE_SOURCE_ENERGY",
+                            "flags.PARTICLE_SOURCE_ANGLE",
+                            "flags.PARTICLE_SOURCE_FILE",
+                            "flags.SPECTROSCOPY","flags.USE3DTETGEOM","flags.USECYLSYMM",
+                            "flags.FLUX_EA","flags.FORCE_EVAL"};
+                            /*
+        int flagValues[] =  {//USE_CUDA, USE_MPI,
+                             USEIONIZATION,
+                             USERECOMBINATION,USEPERPDIFFUSION,USECOULOMBCOLLISIONS,
+                             USETHERMALFORCE,USESURFACEMODEL,USESHEATHEFIELD,BIASED_SURFACE,
+                             USEPRESHEATHEFIELD,BFIELD_INTERP,LC_INTERP, GENERATE_LC,
+                             EFIELD_INTERP,
+                             PRESHEATH_INTERP,DENSITY_INTERP,TEMP_INTERP,
+                             FLOWV_INTERP,GRADT_INTERP,ODEINT,FIXEDSEEDS,
+                             PARTICLESEEDS,GEOM_TRACE,GEOM_HASH,
+                             GEOM_HASH_SHEATH,PARTICLE_TRACKS,PARTICLE_SOURCE_SPACE,
+                             PARTICLE_SOURCE_ENERGY,PARTICLE_SOURCE_ANGLE,
+                             PARTICLE_SOURCE_FILE,
+                             SPECTROSCOPY,USE3DTETGEOM,USECYLSYMM,FLUX_EA,FORCE_EVAL};
+                             */
+            /*
+            int check1;
+            for (int i=0; i<sizeof(flagValues)/sizeof(int); i++)
+               {
+                  if(cfg.lookupValue(flags0[i], check1))
+                  {
+                     if (flagValues[i] != check1)
+                     { std::cout << "incompatibility in " << flags0[i]
+                                           << " between input file and binary" << std::endl;
+                       exit(0);
+                     }
+                     else
+                     {
+                        std::cout << flags0[i] <<" = " << check1<< std::endl;
+                     }
+                  }
+                  else
+                  {
+                     std::cout << flags0[i] <<" was not found" << std::endl;
+                  }
+              }
+              */
 }
+/*
+void print_gpu_memory_usage(const int world_rank)
+{
+#if USE_CUDA
+  if (world_rank == 0) {
+    size_t free_byte;
+    size_t total_byte;
+    cudaError_t cuda_status = cudaMemGetInfo(&free_byte, &total_byte);
 
+    if (cudaSuccess != cuda_status) {
+
+      printf("Error: cudaMemGetInfo fails, %s \n",
+             cudaGetErrorString(cuda_status));
+      exit(1);
+    }
+
+    double free_db = (double)free_byte;
+    double total_db = (double)total_byte;
+    double used_db = total_db - free_db;
+
+    printf("GPU memory usage: used = %f, free = %f MB, total = %f MB\n",
+           used_db / 1024.0 / 1024.0, free_db / 1024.0 / 1024.0,
+           total_db / 1024.0 / 1024.0);
+    int nDevices;
+    int nThreads;
+    cudaGetDeviceCount(&nDevices);
+    std::cout << "number of devices gotten " << nDevices << std::endl;
+    for (int i = 0; i < nDevices; i++) {
+      cudaDeviceProp prop;
+      cudaGetDeviceProperties(&prop, i);
+      printf("Device Number: %d\n", i);
+      printf("  Device name: %s\n", prop.name);
+      printf("  Memory Clock Rate (KHz): %d\n", prop.memoryClockRate);
+      printf("  Memory Bus Width (bits): %d\n", prop.memoryBusWidth);
+      printf("  Peak Memory Bandwidth (GB/s): %f\n\n",
+             2.0 * prop.memoryClockRate * (prop.memoryBusWidth / 8) / 1.0e6);
+      printf("  Total number of threads: %d\n",
+             prop.maxThreadsPerMultiProcessor);
+      nThreads = prop.maxThreadsPerMultiProcessor;
+    }
+  }
+#endif
+}
+*/
 
 template <typename T>
 T getVariable (libconfig::Config &cfg,const std::string& s, T &a)
@@ -115,7 +204,7 @@ T get_variable(libconfig::Config &cfg, const std::string s) {
   if (cfg.lookupValue(s, tmp)) {
     std::cout << s << " = " << tmp << std::endl;
   } else {
-    std::cout << "ERROR: Failed 09 importing 000 " << s << std::endl;
+    std::cout << "ERROR: Failed importing " << s << std::endl;
     exit(EXIT_FAILURE);
   }
   return tmp;
@@ -142,7 +231,6 @@ T getVariable_cfg (libconfig::Config &cfg,const std::string& s)
   return tmp;
 }
 
-  
 template int getVariable_cfg(libconfig::Config &cfg,const std::string& s);
 template unsigned int getVariable_cfg(libconfig::Config &cfg,const std::string& s);
 template float getVariable_cfg(libconfig::Config &cfg,const std::string& s);
@@ -175,8 +263,8 @@ int make2dCDF(int nX, int nY, int nZ, gitr_precision* distribution, gitr_precisi
           {
             cdf[index] = cdf[index-1] + distribution[index];
           }
-        }
-      }
+        }  
+      }  
     }
     for(int i=0;i<nX;i++)
     {
@@ -185,7 +273,7 @@ int make2dCDF(int nX, int nY, int nZ, gitr_precision* distribution, gitr_precisi
         if(cdf[i*nY*nZ + (j+1)*nZ - 1]>0.0)
         {
           for(int k=0;k<nZ;k++)
-          {
+          {  
             index = i*nY*nZ + j*nZ + k;
             cdf[index] = cdf[index]/
                        cdf[index-k+nZ-1];
@@ -209,138 +297,138 @@ int regrid2dCDF(int nX, int nY, int nZ,gitr_precision* xGrid,int nNew,gitr_preci
       {
         index = i*nY*nZ + j*nZ + k;
         spline = interp1dUnstructured(xGrid[k],nNew,maxNew,&cdf[index-k],lowInd);
-        //std::cout<< "index spline " << index << " " << spline << std::endl;
+	    //std::cout<< "index spline " << index << " " << spline << std::endl;
         if(std::isnan(spline) || std::isinf(spline)) spline = 0.0;
-        cdf_regrid[index] = spline;
+        cdf_regrid[index] = spline;  
         if(i==0 && j==0)
         {
           //std::cout << "index xGrid[k] " << index << " " << xGrid[k] << " " << nNew << " " <<
               //maxNew << " " << spline << std::endl;
         }
-      }
+      }  
     }
   }
-  return 0;
+  return 0;  
 }
 void OUTPUT2d(std::string folder,std::string outname,int nX, int nY, gitr_precision *array2d)
 {
        ofstream outfile;
             std::string full_path = folder + "/" + outname;
-            outfile.open (full_path );
-            
-                 for(int i=1 ; i<=nY ; i++)
-                {
-                outfile << "val2d( :," << i<< ") = [ " ;
-                    for(int j=0 ; j<nX ; j++)
-                    {
-                    outfile << array2d[(i-1)*nX + j] << "  " ;
-                    //std::cout << r[i] << std::endl;
-                    }
-                    outfile << "  ];" << std::endl;
-                }
-            outfile.close();
-        
-        
+			outfile.open (full_path );
+			
+				 for(int i=1 ; i<=nY ; i++)
+				{
+				outfile << "val2d( :," << i<< ") = [ " ;
+					for(int j=0 ; j<nX ; j++)
+					{
+					outfile << array2d[(i-1)*nX + j] << "  " ;
+					//std::cout << r[i] << std::endl;
+					}
+					outfile << "  ];" << std::endl;
+				}
+			outfile.close();	
+		
+		
 }
 
 void OUTPUT1d(std::string folder,std::string outname,int nX, gitr_precision *array2d)
 {
        ofstream outfile;
             std::string full_path = folder + "/" + outname;
-            outfile.open (full_path );
-            
-                outfile << "val1d " << "  = [ " ;
-                 for(int i=0 ; i<nX ; i++)
-                {
-                    outfile << array2d[i] << "  " ;
-                }
-                    outfile << "  ];" << std::endl;
-            outfile.close();
-        
-        
+			outfile.open (full_path );
+			
+				outfile << "val1d " << "  = [ " ;
+				 for(int i=0 ; i<nX ; i++)
+				{
+					outfile << array2d[i] << "  " ;
+				}
+					outfile << "  ];" << std::endl;
+			outfile.close();	
+		
+		
 }
 
 void OUTPUT3d(std::string folder,std::string outname,int nX, int nY, int nZ, gitr_precision *array3d)
 {
        ofstream outfile;
             std::string full_path = folder + "/" + outname;
-            outfile.open (full_path );
-            for(int k=1; k<=nZ; k++)
+			outfile.open (full_path );
+			for(int k=1; k<=nZ; k++)
             {
-                 for(int i=1 ; i<=nY ; i++)
-                {
-                outfile << "val3d( :," << i<< "," << k << ") = [ " ;
-                    for(int j=0 ; j<nX ; j++)
-                    {
-                    outfile << array3d[(k-1)*nX*nY + (i-1)*nX + j] << "  " ;
-                    //std::cout << r[i] << std::endl;
-                    }
-                    outfile << "  ];" << std::endl;
-                }
+				 for(int i=1 ; i<=nY ; i++)
+				{
+				outfile << "val3d( :," << i<< "," << k << ") = [ " ;
+					for(int j=0 ; j<nX ; j++)
+					{
+					outfile << array3d[(k-1)*nX*nY + (i-1)*nX + j] << "  " ;
+					//std::cout << r[i] << std::endl;
+					}
+					outfile << "  ];" << std::endl;
+				}
             }
-            outfile.close();
-        
-        
+			outfile.close();	
+		
+		
 }
 void OUTPUT2d(std::string folder,std::string outname,int nX, int nY, int *array2d)
 {
        ofstream outfile;
             std::string full_path = folder + "/" + outname;
-            outfile.open (full_path );
-            
-                 for(int i=1 ; i<=nY ; i++)
-                {
-                outfile << "val2d( :," << i<< ") = [ " ;
-                    for(int j=0 ; j<nX ; j++)
-                    {
-                    outfile << array2d[(i-1)*nX + j] << "  " ;
-                    //std::cout << r[i] << std::endl;
-                    }
-                    outfile << "  ];" << std::endl;
-                }
-            outfile.close();
-        
-        
+			outfile.open (full_path );
+			
+				 for(int i=1 ; i<=nY ; i++)
+				{
+				outfile << "val2d( :," << i<< ") = [ " ;
+					for(int j=0 ; j<nX ; j++)
+					{
+					outfile << array2d[(i-1)*nX + j] << "  " ;
+					//std::cout << r[i] << std::endl;
+					}
+					outfile << "  ];" << std::endl;
+				}
+			outfile.close();	
+		
+		
 }
 
 void OUTPUT1d(std::string folder,std::string outname,int nX, int *array2d)
 {
        ofstream outfile;
             std::string full_path = folder + "/" + outname;
-            outfile.open (full_path );
-            
-                outfile << "val1d " << "  = [ " ;
-                 for(int i=0 ; i<nX ; i++)
-                {
-                    outfile << array2d[i] << "  " ;
-                }
-                    outfile << "  ];" << std::endl;
-            outfile.close();
-        
-        
+			outfile.open (full_path );
+			
+				outfile << "val1d " << "  = [ " ;
+				 for(int i=0 ; i<nX ; i++)
+				{
+					outfile << array2d[i] << "  " ;
+				}
+					outfile << "  ];" << std::endl;
+			outfile.close();	
+		
+		
 }
 
 void OUTPUT3d(std::string folder,std::string outname,int nX, int nY, int nZ, int *array3d)
 {
        ofstream outfile;
             std::string full_path = folder + "/" + outname;
-            outfile.open (full_path );
-            for(int k=1; k<=nZ; k++)
+			outfile.open (full_path );
+			for(int k=1; k<=nZ; k++)
             {
-                 for(int i=1 ; i<=nY ; i++)
-                {
-                outfile << "val3d( :," << i<< "," << k << ") = [ " ;
-                    for(int j=0 ; j<nX ; j++)
-                    {
-                    outfile << array3d[(k-1)*nX*nY + (i-1)*nX + j] << "  " ;
-                    //std::cout << r[i] << std::endl;
-                    }
-                    outfile << "  ];" << std::endl;
-                }
+				 for(int i=1 ; i<=nY ; i++)
+				{
+				outfile << "val3d( :," << i<< "," << k << ") = [ " ;
+					for(int j=0 ; j<nX ; j++)
+					{
+					outfile << array3d[(k-1)*nX*nY + (i-1)*nX + j] << "  " ;
+					//std::cout << r[i] << std::endl;
+					}
+					outfile << "  ];" << std::endl;
+				}
             }
-            outfile.close();
-        
-        
+			outfile.close();	
+		
+		
 }
 int readFileDim(const std::string& fileName,const std::string& varName)
 {
@@ -391,7 +479,7 @@ int importVectorFieldNs(libconfig::Config &cfg,std::string input_path,int interp
     if(interpDim > 2)
     {
       nY = getDimFromFile(cfg,input_path+fileToRead,fieldCfgString,"gridNyString");
-    }
+    } 
   }
   return 0;
 }
@@ -403,7 +491,7 @@ int importVectorField(libconfig::Config &cfg,std::string input_path,int interpDi
     getVariable(cfg,fieldCfgString+"y",y);
     getVariable(cfg,fieldCfgString+"z",z);
   }
-  else{
+  else{  
 
       getVarFromFile(cfg,input_path+fileToRead,fieldCfgString,"gridRString",gridR);
     if(interpDim > 1)
@@ -413,7 +501,7 @@ int importVectorField(libconfig::Config &cfg,std::string input_path,int interpDi
     if(interpDim > 2)
     {
         getVarFromFile(cfg,input_path+fileToRead,fieldCfgString,"gridYString",gridY);
-    }
+    } 
       getVarFromFile(cfg,input_path+fileToRead,fieldCfgString,"rString",r);
       getVarFromFile(cfg,input_path+fileToRead,fieldCfgString,"yString",y);
       getVarFromFile(cfg,input_path+fileToRead,fieldCfgString,"zString",z);
@@ -421,7 +509,7 @@ int importVectorField(libconfig::Config &cfg,std::string input_path,int interpDi
   return 0;
 }
 int importGeometry(libconfig::Config &cfg_geom, sim::Array<Boundary> &boundaries,
-                   int use_3d_geom )
+                   int use_3d_geom, int cylsymm, int surface_potential )
 {
     Setting& geom = cfg_geom.lookup("geom");
     std::cout << "Boundary import routine " << int(boundaries.size()) << std::endl;
@@ -458,14 +546,18 @@ int importGeometry(libconfig::Config &cfg_geom, sim::Array<Boundary> &boundaries
        boundaries[i].area = geom["area"][i];
        boundaries[i].surface = geom["surface"][i];
        boundaries[i].inDir = geom["inDir"][i];
+  if( surface_potential > 0 )
+  {
+    boundaries[i].potential = geom["potential"][i];
+  }
        //std::cout << "inDir " << i << " " << boundaries[i].inDir << std::endl;
        if(boundaries[i].surface > 0)
        {
            boundaries[i].surfaceNumber = nZSurfs;
            nZSurfs = nZSurfs + 1;
-       //    std::cout << "abcd " << boundaries[i].a << " " << boundaries[i].b << " " << boundaries[i].c << " " << boundaries[i].d << std::endl;
+       //    std::cout << "abcd " << boundaries[i].a << " " << boundaries[i].b << " " << boundaries[i].c << " " << boundaries[i].d << std::endl; 
        }
-     }
+     }   
      std::cout << "finished bound import "  << std::endl;
        boundaries[nLines].periodic_bc_x0 = geom["periodic_bc_x0"];
        boundaries[nLines].periodic_bc_x1 = geom["periodic_bc_x1"];
@@ -473,6 +565,13 @@ int importGeometry(libconfig::Config &cfg_geom, sim::Array<Boundary> &boundaries
        boundaries[nLines].y1 = geom["theta0"];
        boundaries[nLines].y2 = geom["theta1"];
        boundaries[nLines].periodic = geom["periodic"];
+     if( cylsymm )
+     {
+          std::cout << "Reading cylindrically symmetric boundary characteristics " << std::endl;
+       boundaries[nLines].y1 = geom["theta0"];
+       boundaries[nLines].y2 = geom["theta1"];
+       boundaries[nLines].periodic = geom["periodic"];
+     }
     outfile.close();
     }
     else
@@ -494,6 +593,11 @@ int importGeometry(libconfig::Config &cfg_geom, sim::Array<Boundary> &boundaries
        boundaries[i].slope_dzdx = geom["slope"][i];
        boundaries[i].intercept_z = geom["intercept"][i];
        boundaries[i].length = geom["length"][i];
+       //std::cout << "got Z slope length " << std::endl;
+       if( surface_potential > 0 )
+       {
+       boundaries[i].potential = geom["potential"][i];
+       }
 
     boundaries[i].a = boundaries[i].z2 - boundaries[i].z1;
     boundaries[i].b = 0.0;
@@ -512,9 +616,9 @@ int importGeometry(libconfig::Config &cfg_geom, sim::Array<Boundary> &boundaries
        {
            boundaries[i].surfaceNumber = nZSurfs;
            nZSurfs = nZSurfs + 1;
-       //    std::cout << "abcd " << boundaries[i].a << " " << boundaries[i].b << " " << boundaries[i].c << " " << boundaries[i].d << std::endl;
+       //    std::cout << "abcd " << boundaries[i].a << " " << boundaries[i].b << " " << boundaries[i].c << " " << boundaries[i].d << std::endl; 
        }
-    }
+    }   
 
     outfile.close();
     boundaries[nLines].Z = geom["Z"][nLines];
@@ -530,7 +634,7 @@ int importHashNs(libconfig::Config &cfg,std::string input_path,int nHashes,std::
       if(nHashes > 1)
       {
         for(int i=0; i<nHashes;i++)
-        {
+        {   
           nR[i] = geomHash["nR"][i];
           nZ[i] = geomHash["nZ"][i];
           n[i] = geomHash["n"][i];
@@ -553,7 +657,7 @@ int importHashNs(libconfig::Config &cfg,std::string input_path,int nHashes,std::
       if(nHashes > 1)
       {
         for(int i=0; i<nHashes;i++)
-        {
+        {   
           nY[i] = geomHash["nY_closeGeom"][i];
         }
       }
@@ -584,7 +688,7 @@ int importHashNs(libconfig::Config &cfg,std::string input_path,int nHashes,std::
     {
         //{
           nHashPoints[j] =nR[j]*nZ[j];
-        //}
+        //} 
     }
         nHashPointsTotal = nHashPointsTotal + nHashPoints[j];
         nGeomHash = nGeomHash + nHashPoints[j]*n[j];
@@ -610,8 +714,8 @@ int read_ar2Input( string fileName, gitr_precision *Bfield[]) {
     NcDim nc_nR(nc.getDim("nR"));
     NcDim nc_nZ(nc.getDim("nZ"));
     
-    int nR = nc_nR.getSize();
-    int nZ = nc_nZ.getSize();
+    int nR = nc_nR.getSize(); 
+    int nZ = nc_nZ.getSize(); 
 
     NcVar nc_r(nc.getVar("r"));
     NcVar nc_z(nc.getVar("z"));
@@ -639,7 +743,7 @@ int read_ar2Input( string fileName, gitr_precision *Bfield[]) {
 
     for(int i=0; i<nR; i++){
         for(int j=0; j<nZ; j++){
-           Bfield[i][j] = br[j][i];
+           Bfield[i][j] = br[j][i]; 
         }
     }
 
@@ -663,8 +767,8 @@ int read_profileNs( std::string fileName, std::string nxName, std::string nzName
     NcDim nc_nx(nc.getDim(nxName));
     NcDim nc_nz(nc.getDim(nzName));
     
-    n_x = nc_nx.getSize();
-    n_z = nc_nz.getSize();
+    n_x = nc_nx.getSize(); 
+    n_z = nc_nz.getSize(); 
 
     nc.close();
     return(0);
@@ -688,8 +792,8 @@ int read_profileNsChar(const char *fileName,const char *nxName,const char *nzNam
     NcDim nc_nx(nc.getDim(nxName));
     NcDim nc_nz(nc.getDim(nzName));
     
-    n_x = nc_nx.getSize();
-    n_z = nc_nz.getSize();
+    n_x = nc_nx.getSize(); 
+    n_z = nc_nz.getSize(); 
 
 
     return(0);
@@ -720,7 +824,6 @@ int read_profiles( std::string fileName, int &n_x, int &n_z,std::string gridxNam
     return(0);
 
 }
-
 
 int read_profile2d( std::string fileName,std::string dataName, sim::Array<gitr_precision>& data) {
     std::cout << "reading 2d profile" << std::endl;
@@ -802,24 +905,24 @@ int read_profile1d( std::string fileName,std::string gridxName, sim::Array<gitr_
 void OUTPUT(char outname[],int nX, int nY, gitr_precision **array2d)
 {
        ofstream outfile;
-                //Output
+				//Output
 
 
-            outfile.open (outname );
-            
-                 for(int i=1 ; i<=nX ; i++)
-                {
-                outfile << "Dep( " << i<< ",:) = [ " ;
-                    for(int j=0 ; j<nY ; j++)
-                    {
-                    outfile << array2d[i-1][j] << "  " ;
-                    //std::cout << r[i] << std::endl;
-                    }
-                    outfile << "  ];" << std::endl;
-                }
-            outfile.close();
-        
-        
+			outfile.open (outname );
+			
+				 for(int i=1 ; i<=nX ; i++)
+				{
+				outfile << "Dep( " << i<< ",:) = [ " ;
+					for(int j=0 ; j<nY ; j++)
+					{
+					outfile << array2d[i-1][j] << "  " ;
+					//std::cout << r[i] << std::endl;
+					}
+					outfile << "  ];" << std::endl;
+				}
+			outfile.close();	
+		
+		
 }
 
 int ncdfIO(int rwCode,const std::string& fileName,std::vector< std::string> dimNames,std::vector<int> dims,
@@ -837,7 +940,7 @@ int ncdfIO(int rwCode,const std::string& fileName,std::vector< std::string> dimN
                 std::cout << "ERROR: Failed to open " << fileName << std::endl;
              }
              else
-             {
+             {   
                 std::cout << "successfully opened " << fileName << std::endl;
              }
           }
@@ -894,7 +997,4 @@ int ncdfIO(int rwCode,const std::string& fileName,std::vector< std::string> dimN
     {
        std::cout << "dimension " <<i << " " <<  dims[i] << std::endl;
     }
-
-    return 0;
 }
-

@@ -18,6 +18,13 @@ include( CMake/dependencies.cmake )
 # define singleton source components - change to "targets"
 include( CMake/define_source_components.cmake )
 
+## AD: comment this for now
+# # define singleton test components
+# include( CMake/define_test_components.cmake )
+
+# configure testing data
+include( CMake/configure_test_data.cmake )
+
 # Make sure everything is built before attempting to link
 include( CMake/enforce_build_order.cmake )
 

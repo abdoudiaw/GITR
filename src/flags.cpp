@@ -4,10 +4,10 @@
 #define CUDA_CALLABLE_MEMBER
 #endif
 
-#include "flags.h"
-#include "utils.h"
+#include "flags.hpp"
 
-CUDA_CALLABLE_MEMBER
+//CUDA_CALLABLE_MEMBER
+//Flags::Flags() : USE_IONIZATION{0} {};
 bool Flags::initialize_flags(libconfig::Config &cfg,std::string s) 
 {
   std::string base = "flags.";

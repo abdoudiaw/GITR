@@ -7,13 +7,17 @@
 #define CUDA_CALLABLE_MEMBER_DEVICE
 #endif
 
-#include <cmath>
-
 #include "Boundary.h"
 #include "Particles.h"
-#include "surfaceReactions.h"
-#include "pusher.h"
+#include "Surfaces.h"
+#include "surfaceModel.h"
+#include "boris.h"
 
+#if USE_OPENMP == 1
+#include "omp.h"
+#endif
+
+#include <cmath>
 
 #if USE_DOUBLE
 typedef double gitr_precision;
@@ -22,34 +26,59 @@ typedef float gitr_precision;
 #endif
 
 __host__ __device__
+gitr_precision
+findT( gitr_precision x0, 
+       gitr_precision x1,
+       gitr_precision y0,
+       gitr_precision y1,
+       gitr_precision intersectionx );
 
-struct geometryCheck {
+  //template<int HOST=1>
+struct geometry_check {
   Particles *particlesPointer;
   const int nLines;
   Boundary *boundaryVector;
-  Flags *flags;
+  Surfaces *surfaces;
+  gitr_precision dt;
+  // int& tt;
+  int nHashes;
+  int *nR_closeGeom;
+  int *nY_closeGeom;
+  int *nZ_closeGeom;
+  int *n_closeGeomElements;
+  gitr_precision *closeGeomGridr;
+  gitr_precision *closeGeomGridy;
+  gitr_precision *closeGeomGridz;
+  int *closeGeom;
+  int nEdist;
+  gitr_precision E0dist;
+  gitr_precision Edist;
+  int nAdist;
+  gitr_precision A0dist;
+  gitr_precision Adist;
+  int flux_ea;
+  int surface_model;
+  int geom_hash;
+  int use_3d_geom;
+  int cylsymm;
 
-  geometryCheck(Particles* _particlesPointer, int _nLines, const Boundary* const _boundaryVector, Flags* _flags);
+  geometry_check(Particles *_particlesPointer, int _nLines,
+                 Boundary *_boundaryVector, Surfaces *_surfaces, gitr_precision _dt,
+                 int _nHashes, int *_nR_closeGeom, int *_nY_closeGeom,
+                 int *_nZ_closeGeom, int *_n_closeGeomElements,
+                 gitr_precision *_closeGeomGridr, gitr_precision *_closeGeomGridy,
+                 gitr_precision *_closeGeomGridz, int *_closeGeom, int _nEdist,
+                 gitr_precision _E0dist, gitr_precision _Edist, int _nAdist, gitr_precision _A0dist,
+                 gitr_precision _Adist,
+                 int flux_ea_,
+                 int surface_model_,
+                 int geom_hash_,
+                 int use_3d_geom_,
+                 int cylsymm_ );
 
-  // Rest of the code remains the same
-
-  __host__  __device__
+  //CUDA_CALLABLE_MEMBER_DEVICE
+ __host__  __device__
   void operator()(std::size_t indx) const;
-  void perform3DTetGeomCheck(std::size_t indx) const;
-  // void updateParticlePosition(std::size_t indx, double x, double y, double z, bool flag) const;
-  bool isIntersected(const gitr_precision p0[3], const gitr_precision p1[3], const Boundary& boundary, gitr_precision intersectionPoint[3]) const;
-  bool isPointInsideTriangle( gitr_precision p[3], const Boundary& boundary) const;
-  void reflectDirection(const gitr_precision velocity[3], const gitr_precision intersectionPoint[3], const gitr_precision normal[3], gitr_precision reflection_dir[3]) const ;
-  void vectorSubtract(const gitr_precision a[3], const gitr_precision b[3], gitr_precision result[3]) const;
-  gitr_precision vectorDotProduct(const gitr_precision a[3], const gitr_precision b[3]) const;
-  void vectorScale(const gitr_precision a[3], const gitr_precision scalar, gitr_precision result[3]) const;
-  void vectorNormalize(gitr_precision a[3]) const;
-  gitr_precision vectorNorm(const gitr_precision a[3]) const;
-  void vectorCrossProduct(const gitr_precision a[3], const gitr_precision b[3], gitr_precision result[3]) const;
-
-void reflect3(gitr_precision v[3], const gitr_precision n[3]) const;
-gitr_precision dot3(const gitr_precision v1[3], const gitr_precision v2[3]) const;
-
 };
 
 #endif
