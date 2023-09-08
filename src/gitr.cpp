@@ -384,7 +384,6 @@ int main(int argc, char **argv, char **envp) {
   MPI_Barrier(MPI_COMM_WORLD);
 #endif
   }
-
   // create Surface data structures
   int nEdist = 1;
   gitr_precision E0dist = 0.0;
@@ -475,8 +474,6 @@ int main(int argc, char **argv, char **envp) {
   sim::Array<gitr_precision> aveSputtYld(nSurfaces, 0.0);
   sim::Array<int> sputtYldCount(nSurfaces, 0);
   sim::Array<int> sumParticlesStrike(nSurfaces, 0);
-  //#endif
-
 
   int nHashes = 1;
   int nR_closeGeomTotal = 1;
@@ -488,11 +485,6 @@ int main(int argc, char **argv, char **envp) {
 
   if( geom_hash == 1 )
   {
-  //nR_closeGeomTotal = 0;
-  //nY_closeGeomTotal = 0;
-  //nZ_closeGeomTotal = 0;
-  //nHashPointsTotal = 0;
-  //nGeomHash = 0;
   if (world_rank == 0) {
     getVariable(cfg, geomHashCfg + "nHashes", nHashes);
   }
@@ -709,7 +701,6 @@ if( geom_hash == 1 )
     closeGeomGridr[i] = (hashX1[nHash] - hashX0[nHash]) * (i - hashSum) /
                             (nR_closeGeom[nHash] - 1) +
                         hashX0[nHash];
-     //std::cout << "gridX "<< closeGeomGridr[i] << std::endl;
   }
   nHash = 0;
   hashSum = 0;
@@ -721,7 +712,6 @@ if( geom_hash == 1 )
     closeGeomGridy[j] = (hashY1[nHash] - hashY0[nHash]) * (j - hashSum) /
                             (nY_closeGeom[nHash] - 1) +
                         hashY0[nHash];
-     //std::cout << "gridY "<< closeGeomGridy[j] << std::endl;
   }
   nHash = 0;
   hashSum = 0;
@@ -733,7 +723,6 @@ if( geom_hash == 1 )
     closeGeomGridz[k] = (hashZ1[nHash] - hashZ0[nHash]) * (k - hashSum) /
                             (nZ_closeGeom[nHash] - 1) +
                         hashZ0[nHash];
-     //std::cout << "gridz "<< closeGeomGridz[k] << std::endl;
   }
 
   std::cout << "about to create iterator1 " << std::endl;
@@ -765,21 +754,6 @@ if( geom_hash == 1 )
             << nGeomHash << " for the entire hash " << std::endl;
 
 #if USE_CUDA > 0
-  // cuda_status = cudaMemGetInfo( &free_byte, &total_byte ) ;
-
-  // if(cudaSuccess != cuda_status )
-  //{
-
-  //  printf("Error: cudaMemGetInfo fails, %s \n",
-  //  cudaGetErrorString(cuda_status) ); exit(1);
-  //}
-
-  // free_db = (double)free_byte ;
-  // total_db = (double)total_byte ;
-  // used_db = total_db - free_db ;
-
-  // printf("GPU memory usage: used = %f, free = %f MB, total = %f MB\n",
-  //  used_db/1024.0/1024.0, free_db/1024.0/1024.0, total_db/1024.0/1024.0);
 #endif
   std::cout << "starting geomhash" << std::endl;
   typedef std::chrono::high_resolution_clock Time0;
@@ -802,10 +776,6 @@ if( geom_hash == 1 )
                    lines0 + world_rank * nHashMeshPointsPerProcess +
                        hashMeshIncrements[world_rank],
                    geo1);
-// for(int i=0;i<nR_closeGeom*nY_closeGeom*nZ_closeGeom;i++)
-//{
-// geo1(i);
-//}
 #if USE_CUDA
   cudaDeviceSynchronize();
 #endif
@@ -1284,9 +1254,6 @@ else
 if( GENERATE_LC > 0 )
 {
   gitr_precision lcBuffer = 0.0;
-  // if( !boost::filesystem::exists( lcFile ) )
-  // {
-  //   std::cout << "No pre-existing connection length file found" << std::endl;
     if( use_3d_geom > 0 )
     {
   gitr_precision dy_Lc = (y1_Lc - y0_Lc) / (nY_Lc - 1);
@@ -1468,17 +1435,13 @@ if( GENERATE_LC > 0 )
     for (int i = 0; i < nR_Lc; i++) {
       for (int j = 0; j < nY_Lc; j++) {
         for (int k = 0; k < nZ_Lc; k++) {
-          // std::cout << "hitwall of tracers " <<
-          // forwardTracerParticles->hitWall[addIndex] << std::endl;
     if( use_3d_geom > 0 )
     {
           addIndex = i + j * nR_Lc + k * nR_Lc * nY_Lc;
     }
     else
     {
-//#else
         addIndex = i + k * nR_Lc;
-//#endif
     }
           if (forwardTracerParticles->hitWall[addIndex] > 0) {
             forwardDist = forwardTracerParticles->distanceTraveled[addIndex];
@@ -1563,17 +1526,7 @@ if( GENERATE_LC > 0 )
     nc_gridYLc = ncFileLC.addVar("gridY", netcdf_precision, nc_nYLc);
     }
     NcVar nc_gridZLc = ncFileLC.addVar("gridZ", netcdf_precision, nc_nZLc);
-   //FIXME - commented these because of disrupted workflow compile errors
-    //nc_Lc.putVar(&Lc[0]);
-    //nc_s.putVar(&s[0]);
-    //nc_ftx.putVar(&forwardTracerX[0]);
-    //nc_fty.putVar(&forwardTracerY[0]);
-    //nc_ftz.putVar(&forwardTracerZ[0]);
-    //nc_btx.putVar(&backwardTracerX[0]);
-    //nc_bty.putVar(&backwardTracerY[0]);
-    //nc_btz.putVar(&backwardTracerZ[0]);
-    //nc_nI.putVar(&noIntersectionNodes[0]);
-    //nc_gridRLc.putVar(&gridRLc[0]);
+
     if( use_3d_geom )
     {
     nc_gridYLc.putVar(&gridYLc[0]);
@@ -2390,7 +2343,6 @@ if( presheath_interp == 1 )
   sim::Array<gitr_precision> preSheathEGridr(nR_PreSheathEfield),
       preSheathEGridy(nY_PreSheathEfield), preSheathEGridz(nZ_PreSheathEfield);
   sim::Array<gitr_precision> PSEr(nPSEs), PSEz(nPSEs), PSEt(nPSEs);
-
   }
 
   std::string outnamePSEfieldR = "PSEfieldR.m";
@@ -2418,7 +2370,6 @@ if( presheath_interp == 1 )
                 &closeGeomGridy_sheath.front(), &closeGeomGridz_sheath.front(),
                 &closeGeom_sheath.front(), minInd_bnd, biased_surface,
                 use_3d_geom, geom_hash_sheath, cylsymm );
-        //std::cout << "Efield rzt " << thisE0[0] << " " << thisE0[1] << " " << thisE0[2] << std::endl;
     }
 
     if( efield_interp == 2 )
@@ -2557,13 +2508,9 @@ if( presheath_interp == 1 )
   }
 }
 
-
   sim::Array<gitr_precision> net_Bins( net_Bins_size, 0.0 );
-
   sim::Array<gitr_precision> net_BinsTotal( net_BinsTotal_size, 0.0 );
 
-  // Perp DiffusionCoeff initialization - only used when Diffusion interpolator
-  // is = 0
   gitr_precision perpDiffusionCoeff = 0.0;
   if (world_rank == 0) {
     if (cfg.lookupValue("backgroundPlasmaProfiles.Diffusion.Dperp",
@@ -2698,11 +2645,7 @@ if( presheath_interp == 1 )
                    "AphiDist_R", AphiDist_R[0]);
     getVarFromFile(cfg, input_path + surfaceModelFile, surfaceModelCfg,
                    "AthetaDist_R", AthetaDist_R[0]);
-    // for(int i=0;i<nDistE_surfaceModel;i++)
-    //{
-    //    std::cout << " Edist diff Y " << EDist_Y[i] << " " << EDist_R[i] <<
-    //    std::endl;
-    //}
+
     for (int i = 0; i < nE_sputtRefCoeff; i++) {
       Elog_sputtRefCoeff[i] = log10(E_sputtRefCoeff[i]);
       std::cout << " EsputtRefCoeff and Elog " << E_sputtRefCoeff[i] << " "
@@ -2719,7 +2662,6 @@ if( presheath_interp == 1 )
     }
     for (int i = 0; i < nA_sputtRefDistOut; i++) {
       angleDistGrid01[i] = i * 1.0 / nA_sputtRefDistOut;
-      // std::cout << " angleDistGrid01[i] " << angleDistGrid01[i] << std::endl;
     }
     make2dCDF(nE_sputtRefDistIn, nA_sputtRefDistIn, nE_sputtRefDistOut,
               EDist_Y.data(), EDist_CDF_Y.data());
@@ -2735,15 +2677,6 @@ if( presheath_interp == 1 )
               AthetaDist_R.data(), AthetaDist_CDF_R.data());
     make2dCDF(nE_sputtRefDistIn, nA_sputtRefDistIn, nA_sputtRefDistOut,
               AthetaDist_R.data(), AthetaDist_CDF_R.data());
-    // for(int k=0;k<nE_sputtRefDistOut;k++)
-    //{
-    //      std::cout << "Edist_CDF_Y " <<
-    //      EDist_CDF_Y[0*nA_sputtRefDistIn*nE_sputtRefDistOut +
-    //      0*nE_sputtRefDistOut+k] << std::endl;
-    ////      std::cout << "cosDist_CDFR " <<
-    ///EDist_CDF_R[0*nA_sputtRefDistIn*nE_sputtRefDistOut +
-    ///0*nE_sputtRefDistOut+k] << std::endl;
-    //}
     regrid2dCDF(nE_sputtRefDistIn, nA_sputtRefDistIn, nA_sputtRefDistOut,
                 angleDistGrid01.data(), nA_sputtRefDistOut,
                 Aphi_sputtRefDistOut[nA_sputtRefDistOut - 1],
@@ -2756,12 +2689,6 @@ if( presheath_interp == 1 )
                 energyDistGrid01.data(), nE_sputtRefDistOut,
                 E_sputtRefDistOut[nE_sputtRefDistOut - 1], EDist_CDF_Y.data(),
                 EDist_CDF_Y_regrid.data());
-    // std::cout << "max value " << E_sputtRefDistOut[nE_sputtRefDistOut-1] <<
-    // std::endl; for(int k=0;k<60;k++)
-    // {
-    //     std::cout << "Edis amd cdf " << k << " " << EDist_CDF_Y[k] << " "
-    //     <<EDist_CDF_Y_regrid[k] << std::endl;
-    // }
     regrid2dCDF(nE_sputtRefDistIn, nA_sputtRefDistIn, nA_sputtRefDistOut,
                 angleDistGrid01.data(), nA_sputtRefDistOut,
                 Aphi_sputtRefDistOut[nA_sputtRefDistOut - 1],
@@ -2881,9 +2808,6 @@ if( presheath_interp == 1 )
 #else
   cout << "Not using THRUST" << endl;
 #endif
-
-
-
   gitr_precision dt;
   int nP = 0;          // cfg.lookup("impurityParticleSource.nP");
   long nParticles = 0; // nP;
@@ -2940,7 +2864,6 @@ if( presheath_interp == 1 )
       countP = countP + nPPerRank[i];
     }
   }
-
 
   for (int i = 0; i < world_size; i++) {
     nActiveParticlesOnRank[i] = nPPerRank[i];
