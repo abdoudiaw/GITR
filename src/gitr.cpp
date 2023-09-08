@@ -39,6 +39,11 @@
 #include <vector>
 #include "flags.hpp"
 
+// Abdou's modification
+// #include "getParticleData.h"
+#include <numeric> 
+
+
 #ifdef __CUDACC__
 #include <curand.h>
 #include <curand_kernel.h>
@@ -66,6 +71,12 @@
 
 
 using namespace netCDF;
+
+
+const gitr_precision PI = 3.141592653589793;
+const gitr_precision ELECTRON_CHARGE = 1.602e-19;
+const gitr_precision AMU_CONVERSION = 1.66e-27;
+
 
 #if USE_DOUBLE
 typedef double gitr_precision;
@@ -3114,33 +3125,10 @@ if( presheath_interp == 1 )
   MPI_Barrier(MPI_COMM_WORLD);
 #endif
   }
-  // Particle time stepping control
-  // int ionization_nDtPerApply  =
-  // cfg.lookup("timeStep.ionization_nDtPerApply"); int collision_nDtPerApply  =
-  // cfg.lookup("timeStep.collision_nDtPerApply");
-
 #ifdef __CUDACC__
   cout << "Using THRUST" << endl;
 #else
   cout << "Not using THRUST" << endl;
-  // int nthreads, tid;
-  //#pragma omp parallel private(nthreads, tid)
-  //{
-  //    nthreads = omp_get_num_threads();
-  //      tid = omp_get_thread_num();
-  //      if(tid == 0)
-  //      {
-  //          std::cout << "N Threads " << nthreads << std::endl;
-  //      }
-  //      std::cout << "Hello world" << tid << std::endl;
-  //}
-  //    //nthreads = omp_get_num_threads();
-  //    //nthreads = 24;
-  //    //std::cout << "N threads " << nthreads << std::endl;
-  // thrust::counting_iterator<std::size_t> ex0(0);
-  // thrust::counting_iterator<std::size_t> ex1(nthreads-1);
-  //              thrust::for_each(thrust::device, ex0,ex1,
-  //                               ompPrint());
 #endif
 
   gitr_precision dt;
@@ -3202,641 +3190,109 @@ if( presheath_interp == 1 )
   for (int i = 0; i < world_size; i++) {
     nActiveParticlesOnRank[i] = nPPerRank[i];
   }
-  std::cout << "World rank " << world_rank << " has " << nPPerRank[world_rank]
-            << " starting at " << pStartIndx[world_rank] 
-            << " ending at " << pStartIndx[world_rank]+nPPerRank[world_rank] << std::endl;
+         
   auto particleArray = new Particles(nParticles,1,cfg,gitr_flags);
 
-  gitr_precision x, y, z, E, vtotal, vx, vy, vz, Ex, Ey, Ez, amu, Z, charge, phi, theta,
-      Ex_prime, Ez_prime, theta_transform;
+  std::cout << "creating particle source" << std::endl;
+  nP = cfg.lookup("impurityParticleSource.nP");
+  sim::Array<gitr_precision>  px(nP), py(nP), pz(nP), pvx(nP), pvy(nP), pvz(nP), pamu(nP), pZ(nP), pcharge(nP);
+  
+  libconfig::Setting& speciesArray = cfg.lookup("impurityParticleSource.initialConditions.species");
+  int num_species = speciesArray.getLength();
+  printf("Number of species: %d\n",num_species);
+    // Initialize arrays or vectors to store values for all species
+  std::vector<gitr_precision> amu(num_species);
+  std::vector<gitr_precision> Z(num_species);
+  std::vector<gitr_precision> charge(num_species);
+  int particlesPerSpecies[num_species];
+  int particle_index = 0;
+
   if (world_rank == 0) {
-    if (cfg.lookupValue("impurityParticleSource.initialConditions.impurity_amu",
-                        amu) &&
-        cfg.lookupValue("impurityParticleSource.initialConditions.impurity_Z",
-                        Z) &&
-        cfg.lookupValue("impurityParticleSource.initialConditions.charge",
-                        charge)) {
-      std::cout << "Impurity amu Z charge: " << amu << " " << Z << " " << charge
-                << std::endl;
-    } else {
-      std::cout
-          << "ERROR: Could not get point source impurity initial conditions"
-          << std::endl;
-    }
-  }
-#if USE_MPI > 0
-  MPI_Bcast(&amu, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(&Z, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(&charge, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
-  MPI_Barrier(MPI_COMM_WORLD);
-#endif
+    for (int i = 0; i < num_species; i++) {
+          gitr_precision _amu, _Z, _charge;
+          gitr_precision _energy_eV, _phi, _theta;
+          gitr_precision _x_start, _y_start, _z_start;
+          int  _numberParticlesPerSpecies;
+          if (speciesArray[i].lookupValue("impurity_amu", _amu) &&
+              speciesArray[i].lookupValue("impurity_Z", _Z) &&
+              speciesArray[i].lookupValue("charge", _charge) &&
+              speciesArray[i].lookupValue("numberParticles", _numberParticlesPerSpecies) &&
+              speciesArray[i].lookupValue("energy_eV", _energy_eV) &&
+              speciesArray[i].lookupValue("theta", _theta) &&
+              speciesArray[i].lookupValue("x_start", _x_start) &&
+              speciesArray[i].lookupValue("y_start", _y_start) &&
+              speciesArray[i].lookupValue("z_start", _z_start) &&
+              speciesArray[i].lookupValue("phi", _phi) )
+               {
+              // Store the values
+              amu[i] = _amu;
+              Z[i] = _Z;
+              charge[i] = _charge;
+              particlesPerSpecies[i] = _numberParticlesPerSpecies;
+              std::cout << "Species " << (i+1) << " - Impurity amu Z charge: " 
+                        << _amu << " " << _Z << " " << _charge << " particlesPerSpecies"  << " " << _numberParticlesPerSpecies << " "
+                        << " phi theta energy: " << _phi << " " << _theta << " " << _energy_eV << std::endl;
+          } else {
+              std::cout << "ERROR: Could not get initial conditions for species " 
+                        << (i+1) << std::endl;
+          }
 
-  int nSourceSurfaces = 0;
-  int currentSegment = 0;
-  if( particle_source_space == 0 )
-  {
-  if (world_rank == 0) {
-    if (cfg.lookupValue("impurityParticleSource.initialConditions.x_start",
-                        x) &&
-        cfg.lookupValue("impurityParticleSource.initialConditions.y_start",
-                        y) &&
-        cfg.lookupValue("impurityParticleSource.initialConditions.z_start",
-                        z)) {
-      std::cout << "Impurity point source: " << x << " " << y << " " << z
-                << std::endl;
-    } else {
-      std::cout
-          << "ERROR: Could not get point source impurity initial conditions"
-          << std::endl;
-    }
-  }
-#if USE_MPI > 0
-  MPI_Bcast(&x, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(&y, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(&z, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
-  MPI_Barrier(MPI_COMM_WORLD);
-#endif
-  }
-// Material Surfaces - flux weighted source
-  else if( particle_source_space > 0 )
-  {
-  libconfig::Config cfg_particles;
-  std::string particleSourceFile;
-  getVariable(cfg, "particleSource.fileString", particleSourceFile);
-  std::cout << "Open particle source file " << input_path + particleSourceFile
-            << std::endl;
-  importLibConfig(cfg_particles, input_path + particleSourceFile);
-  std::cout << "Successfully staged input and particle source file "
-            << std::endl;
+          if (particle_source_energy == 0) {
+              for (int j = 0; j < _numberParticlesPerSpecies; j++) {
+                gitr_precision rad_phi = _phi * M_PI / 180.0;
+                gitr_precision rad_theta = _theta * M_PI / 180.0;
 
-  libconfig::Setting &particleSourceSetting = cfg_particles.lookup("particleSource");
-  std::cout << "Successfully set particleSource setting " << std::endl;
-  int nSourceBoundaries = 0, nSourceElements = 0;
-  gitr_precision sourceMaterialZ = 0.0, accumulatedLengthArea = 0.0,
-        sourceSampleResolution = 0.0;
-  if (cfg_particles.lookupValue("particleSource.materialZ", sourceMaterialZ)) {
-    std::cout << "Particle Source Material Z: " << sourceMaterialZ << std::endl;
-  } else {
-    std::cout << "ERROR: Could not get particle source material Z" << std::endl;
-  }
-  if (sourceMaterialZ > 0.0) { // count source boundaries
-    for (int i = 0; i < nLines; i++) {
-      if (boundaries[i].Z == sourceMaterialZ) {
-        nSourceBoundaries++;
-    if( use_3d_geom )
-    {
-        accumulatedLengthArea = accumulatedLengthArea + boundaries[i].area;
-    }
-    else
-    {
-        accumulatedLengthArea = accumulatedLengthArea + boundaries[i].length;
-    }
-      }
-    }
-  } else {
-    if (cfg_particles.lookupValue("particleSource.nSourceBoundaries",
-                                  nSourceBoundaries)) {
-      std::cout << "Particle Source nSourceBoundaries: " << nSourceBoundaries
-                << std::endl;
-    } else {
-      std::cout << "ERROR: Could not get particle source nSourceBoundaries"
-                << std::endl;
-    }
-    for (int i = 0; i < nSourceBoundaries; i++) {
-    if( use_3d_geom )
-    {
-      accumulatedLengthArea =
-          accumulatedLengthArea +
-          boundaries[int(particleSourceSetting["surfaceIndices"][i])].area;
-    }
-    else
-    {
-      accumulatedLengthArea =
-          accumulatedLengthArea +
-          boundaries[int(particleSourceSetting["surfaceIndices"][i])].length;
-    }
-    }
-  }
-  if (cfg_particles.lookupValue("particleSource.sourceSampleResolution",
-                                sourceSampleResolution)) {
-    std::cout << "Particle Source sample resolution: " << sourceSampleResolution
-              << std::endl;
-  } else {
-    std::cout << "ERROR: Could not get particle source sample resolution"
-              << std::endl;
-  }
-  nSourceElements = ceil(accumulatedLengthArea / sourceSampleResolution);
-  std::cout << "nSourceBoundaries accumulatedLength nSourceElements "
-            << nSourceBoundaries << " " << accumulatedLengthArea << " "
-            << nSourceElements << std::endl;
-  sim::Array<gitr_precision> particleSourceSpaceCDF(nSourceElements, 0.0),
-      particleSourceX(nSourceElements, 0.0),
-      particleSourceY(nSourceElements, 0.0),
-      particleSourceZ(nSourceElements, 0.0),
-      particleSourceSpaceGrid(nSourceElements, 0.0);
-  sim::Array<int> particleSourceIndices(nSourceElements, 0),
-      particleSourceBoundaryIndices(nSourceBoundaries, 0);
+                gitr_precision vtotal = std::sqrt(2.0 * _energy_eV * ELECTRON_CHARGE/ _amu / AMU_CONVERSION);
 
-      /* Captain! Decayed code block, leave for reference */
-      /*
-      if( PARTICLE_SOURCE_SPACE == 1 )
-      {
-  for (int i = 0; i < nSourceBoundaries; i++) {
-    particleSourceBoundaryIndices[i] =
-        particleSourceSetting["surfaceIndices"][i];
-  }
-  int currentSegmentIndex = 0, currentBoundaryIndex = 0;
-  gitr_precision currentAccumulatedLengthArea = 0.0, lengthAlongBoundary = 0.0,
-        bDotSurfaceNorm = 0.0;
-  gitr_precision parVec[3] = {0.0};
-  gitr_precision perpVec[3] = {0.0};
-  currentBoundaryIndex = particleSourceBoundaryIndices[currentSegmentIndex];
-  currentAccumulatedLengthArea =
-      currentAccumulatedLengthArea + boundaries[currentBoundaryIndex].length;
-  for (int i = 0; i < nSourceElements; i++) {
-    if (i * sourceSampleResolution > currentAccumulatedLengthArea) {
-      currentSegmentIndex++;
-      currentBoundaryIndex = particleSourceBoundaryIndices[currentSegmentIndex];
-      currentAccumulatedLengthArea = currentAccumulatedLengthArea +
-                                     boundaries[currentBoundaryIndex].length;
-    }
-    particleSourceIndices[i] = currentBoundaryIndex;
-    particleSourceBoundaryIndices[currentSegmentIndex] =
-        particleSourceSetting["surfaceIndices"][currentSegmentIndex];
-    boundaries[currentBoundaryIndex].getSurfaceParallel(parVec);
-    lengthAlongBoundary =
-        i * sourceSampleResolution - (currentAccumulatedLengthArea -
-                                      boundaries[currentBoundaryIndex].length);
-    particleSourceX[i] =
-        boundaries[currentBoundaryIndex].x1 + parVec[0] * lengthAlongBoundary;
-    particleSourceZ[i] =
-        boundaries[currentBoundaryIndex].z1 + parVec[2] * lengthAlongBoundary;
-    gitr_precision localN = interp2dCombined(particleSourceX[i], 0.0, particleSourceZ[i],
-                                    nR_Dens, nZ_Dens, DensGridr.data(),
-                                    DensGridz.data(), ni.data());
-    gitr_precision localT = interp2dCombined(particleSourceX[i], 0.0, particleSourceZ[i],
-                                    nR_Temp, nZ_Temp, TempGridr.data(),
-                                    TempGridz.data(), ti.data());
-    gitr_precision localCs = std::sqrt(2 * localT * 1.602e-19 / (1.66e-27 * background_amu));
-    gitr_precision localBnorm[3] = {0.0};
-    interp2dVector(&localBnorm[0], particleSourceX[i], 0.0, particleSourceZ[i],
-                   nR_Bfield, nZ_Bfield, bfieldGridr.data(), bfieldGridz.data(),
-                   br.data(), bz.data(), by.data());
-    vectorNormalize(localBnorm, localBnorm);
-    boundaries[currentBoundaryIndex].getSurfaceNormal(perpVec);
-    bDotSurfaceNorm = std::abs(vectorDotProduct(localBnorm, perpVec));
-    gitr_precision localY = interp2dCombined(
-        std::log10(3.0 * localT), 0.0, std::acos(bDotSurfaceNorm) * 180 / 3.14159,
-        nE_surfaceModel, nA_surfaceModel, Elog_surfaceModel.data(),
-        A_surfaceModel.data(), spyl_surfaceModel.data());
-    localY = interp2dCombined(
-        std::acos(bDotSurfaceNorm) * 180 / 3.14159, 0.0, std::log10(3.0 * localT),
-        nA_surfaceModel, nE_surfaceModel, A_surfaceModel.data(),
-        Elog_surfaceModel.data(), spyl_surfaceModel.data());
-    std::cout << "LocalPotential localAngle localY " << 3.0 * localT << " "
-              << std::acos(bDotSurfaceNorm) * 180 / 3.1415 << " " << localY
-              << std::endl;
-    gitr_precision localFlux = localCs * localN * bDotSurfaceNorm; // dotB*surf
-    std::cout << "segment boundary pos x z n t cs flux " << i << " "
-              << currentBoundaryIndex << " " << particleSourceX[i] << " "
-              << particleSourceZ[i] << " " << localN << " " << localT << " "
-              << localCs << " " << localFlux << std::endl;
-    std::cout << "bfield perpvec bDotSurf " << localBnorm[0] << " "
-              << localBnorm[1] << " " << localBnorm[2] << " " << perpVec[0]
-              << " " << perpVec[1] << " " << perpVec[2] << " "
-              << bDotSurfaceNorm << " " << std::acos(bDotSurfaceNorm) * 180 / 3.1415
-              << " " << localY << std::endl;
-    if (i == 0) {
-      particleSourceSpaceCDF[i] = localFlux * localY;
-    } else {
-      particleSourceSpaceCDF[i] =
-          particleSourceSpaceCDF[i - 1] + localFlux * localY;
-    }
-    std::cout << "particleSourceSpaceCDF " << i << " "
-              << particleSourceSpaceCDF[i] << std::endl;
-  }
-  for (int i = 0; i < nSourceElements; i++) {
-    particleSourceSpaceCDF[i] =
-        particleSourceSpaceCDF[i] / particleSourceSpaceCDF[nSourceElements - 1];
-    std::cout << "particleSourceSpaceCDF " << i << " "
-              << particleSourceIndices[i] << " " << particleSourceX[i] << " "
-              << particleSourceZ[i] << particleSourceSpaceCDF[i] << std::endl;
-  }
-  std::random_device randDevice;
-  //boost::random::mt19937 s0;
-  s0.seed(123456);
-  //boost::random::uniform_01<> dist01;
-  gitr_precision rand0 = 0.0;
-  int lowInd = 0;
-  int currentSegment = 0;
-      }
-      */
-  }
+                gitr_precision vx = vtotal * std::sin(rad_phi) * std::cos(rad_theta);
+                gitr_precision vy = vtotal * std::sin(rad_phi) * std::sin(rad_theta);
+                gitr_precision vz = vtotal * std::cos(rad_phi);
 
-  if( particle_source_energy == 0 )
-  {
-  if (world_rank == 0) {
-    if (cfg.lookupValue("impurityParticleSource.initialConditions.energy_eV",
-                        E)) {
-      std::cout << "Impurity point source E: " << E << std::endl;
-    } else {
-      std::cout
-          << "ERROR: Could not get point source impurity initial conditions"
-          << std::endl;
-    }
-  }
+                if (rad_phi == 0.0) {
+                    vx = 0.0;
+                    vy = 0.0;
+                    vz = vtotal;
+                }
 
-#if USE_MPI > 0
-  MPI_Bcast(&E, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
-  MPI_Barrier(MPI_COMM_WORLD);
-#endif
-  }
-  else if( particle_source_energy > 0 )
-  {
-    if( particle_source_energy == 1 )
-    {
-  // Create Thompson Distribution
-  gitr_precision surfaceBindingEnergy =
-      cfg.lookup("impurityParticleSource.source_material_SurfaceBindingEnergy");
-  gitr_precision surfaceAlpha =
-      cfg.lookup("impurityParticleSource.source_materialAlpha");
-  std::cout << "surface binding energy " << surfaceBindingEnergy << std::endl;
-  int nThompDistPoints = 200;
-  gitr_precision max_Energy = 100.0;
-  sim::Array<gitr_precision> ThompsonDist(nThompDistPoints),
-      CumulativeDFThompson(nThompDistPoints);
-  for (int i = 0; i < nThompDistPoints; i++) {
-    if (surfaceAlpha > 0.0) {
-      ThompsonDist[i] =
-          surfaceAlpha * (surfaceAlpha - 1.0) *
-          (i * max_Energy / nThompDistPoints) *
-          std::pow(surfaceBindingEnergy, surfaceAlpha - 1.0) /
-          std::pow((i * max_Energy / nThompDistPoints) + surfaceBindingEnergy,
-              (surfaceAlpha + 1.0));
-    } else {
-      ThompsonDist[i] =
-          (i * max_Energy / nThompDistPoints) /
-          std::pow((i * max_Energy / nThompDistPoints) + surfaceBindingEnergy, 3);
-    }
-    if (i == 0) {
-      CumulativeDFThompson[i] = ThompsonDist[i];
-    } else {
-      CumulativeDFThompson[i] = CumulativeDFThompson[i - 1] + ThompsonDist[i];
-    }
-  }
-  for (int i = 0; i < nThompDistPoints; i++) {
-    CumulativeDFThompson[i] =
-        CumulativeDFThompson[i] / CumulativeDFThompson[nThompDistPoints - 1];
-    // std::cout << "energy and CDF" << i*max_Energy/nThompDistPoints << " " <<
-    // CumulativeDFThompson[i] << std::endl;
-  }
-    }
-  //boost::random::mt19937 sE;
-  //boost::random::uniform_01<> dist01E;
-  gitr_precision randE = 0.0;
-  int lowIndE = 0;
-  }
-  if( particle_source_angle == 0 )
-  {
-  if (world_rank == 0) {
-    if (cfg.lookupValue("impurityParticleSource.initialConditions.phi", phi) &&
-        cfg.lookupValue("impurityParticleSource.initialConditions.theta",
-                        theta)) {
-      std::cout << "Impurity point source angles phi theta: " << phi << " "
-                << theta << std::endl;
-    } else {
-      std::cout
-          << "ERROR: Could not get point source angular initial conditions"
-          << std::endl;
-    }
-  }
-#if USE_MPI > 0
-  MPI_Bcast(&phi, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(&theta, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
-  MPI_Barrier(MPI_COMM_WORLD);
-#endif
-  phi = phi * 3.141592653589793 / 180.0;
-  theta = theta * 3.141592653589793 / 180.0;
-  /* equation to convert eV energy to vector velocity components */
-  vtotal = std::sqrt(2.0 * E * 1.602e-19 / amu / 1.66e-27);
-  vx = vtotal * std::sin(phi) * std::cos(theta);
-  vy = vtotal * std::sin(phi) * std::sin(theta);
-  vz = vtotal * std::cos(phi);
-  if (phi == 0.0) {
-    vx = 0.0;
-    vy = 0.0;
-    vz = vtotal;
-  }
-  }
-  else if( particle_source_angle > 0 )
-  {
+                // Store these values in the global arrays
+                px[particle_index] = _x_start;
+                py[particle_index] = _y_start;
+                pz[particle_index] = _z_start;
+                pvx[particle_index] = vx;
+                pvy[particle_index] = vy;
+                pvz[particle_index] = vz;
+                pcharge[particle_index] = _charge;
+                pamu[particle_index] = _amu;
+                pZ[particle_index] = _Z;
 
-  std::cout << "Read particle source " << std::endl;
-
-  // cfg_particles.readFile((input_path+"particleSource.cfg").c_str());
-  // Setting& particleSource = cfg_particles.lookup("particleSource");
-  // int nSegmentsAngle = particleSource["nSegmentsAngle"];
-  // float angleSample;
-  // sim::Array<float> sourceAngleSegments(nSegmentsAngle);
-  // sim::Array<float> angleCDF(nSegmentsAngle);
-  // for (int i=0; i<(nSegmentsAngle); i++)
-  //{
-  //    sourceAngleSegments[i] = particleSource["angles"][i];
-  //    angleCDF[i] = particleSource["angleCDF"][i];
-  //}
-  std::random_device randDevice_particleA;
-  std::mt19937 sA(randDevice_particleA());
-  std::uniform_real_distribution<gitr_precision> dist01A(0.0, 1.0);
-  gitr_precision randA = 0.0;
-  int lowIndA = 0;
-  }
-  std::cout << "Starting psourcefile import " << std::endl;
-  vector<gitr_precision> xpfile(nP), ypfile(nP), zpfile(nP), vxpfile(nP), vypfile(nP),
-      vzpfile(nP);
-      if( particle_source_file > 0 )
-      {
-  libconfig::Config cfg_particles;
-  std::string ncParticleSourceFile;
-  int nPfile = 0;
-  if (world_rank == 0) {
-    getVariable(cfg, "particleSource.ncFileString", ncParticleSourceFile);
-    std::cout << "About to try to open NcFile ncp0 " << std::endl;
-    // Return this in event of a problem.
-    static const int NC_ERR = 2;
-    try {
-	    netCDF::NcFile ncp0("input/" + ncParticleSourceFile, netCDF::NcFile::read);
-    } catch (netCDF::exceptions::NcException &e) {
-      e.what();
-      cout << "FAILURE*************************************" << endl;
-      return NC_ERR;
+                particle_index++;  // Move to the next slot for the next particle
+            }
+         }
     }
-    std::cout << "finished NcFile ncp0 starting ncp" << std::endl;
-    netCDF::NcFile ncp("input/" + ncParticleSourceFile, netCDF::NcFile::read);
-    std::cout << "getting dim nP" << std::endl;
-    netCDF::NcDim ps_nP(ncp.getDim("nP"));
+  }
+      int totalParticles = std::accumulate(particlesPerSpecies, particlesPerSpecies + num_species, 0);
+      printf("Total number of particles: %d\n", totalParticles);
 
-    nPfile = ps_nP.getSize();
-    xpfile.resize(nPfile);
-    ypfile.resize(nPfile);
-    zpfile.resize(nPfile);
-    vxpfile.resize(nPfile);
-    vypfile.resize(nPfile);
-    vzpfile.resize(nPfile);
-    // std::cout << "nPfile "<< nPfile << std::endl;
-    netCDF::NcVar ncp_x(ncp.getVar("x"));
-    netCDF::NcVar ncp_y(ncp.getVar("y"));
-    netCDF::NcVar ncp_z(ncp.getVar("z"));
-    netCDF::NcVar ncp_vx(ncp.getVar("vx"));
-    netCDF::NcVar ncp_vy(ncp.getVar("vy"));
-    netCDF::NcVar ncp_vz(ncp.getVar("vz"));
-    std::cout << "got through NcVar " << std::endl;
-    ncp_x.getVar(&xpfile[0]);
-    ncp_y.getVar(&ypfile[0]);
-    ncp_z.getVar(&zpfile[0]);
-    ncp_vx.getVar(&vxpfile[0]);
-    ncp_vy.getVar(&vypfile[0]);
-    ncp_vz.getVar(&vzpfile[0]);
-    std::cout << "defined file vectors " << std::endl;
-    ncp.close();
-    std::cout << "closed ncp " << std::endl;
-  }
-#if USE_MPI > 0
-  MPI_Bcast(&nPfile, 1, MPI_INT, 0, MPI_COMM_WORLD);
-  MPI_Barrier(MPI_COMM_WORLD);
-  if (world_rank > 0) {
-    xpfile.resize(nPfile);
-    ypfile.resize(nPfile);
-    zpfile.resize(nPfile);
-    vxpfile.resize(nPfile);
-    vypfile.resize(nPfile);
-    vzpfile.resize(nPfile);
-  }
-  MPI_Bcast(xpfile.data(), nPfile, MPI_FLOAT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(ypfile.data(), nPfile, MPI_FLOAT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(zpfile.data(), nPfile, MPI_FLOAT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(vxpfile.data(), nPfile, MPI_FLOAT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(vypfile.data(), nPfile, MPI_FLOAT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(vzpfile.data(), nPfile, MPI_FLOAT, 0, MPI_COMM_WORLD);
-  MPI_Barrier(MPI_COMM_WORLD);
-#endif
-  // for(int i=0;i<nPfile;i++)
-  //{
-  //    std::cout << " xyz from file " << xpfile[i] << " " << ypfile[i] << " "
-  //    << zpfile[i] << std::endl; std::cout << " Exyz from file " << Expfile[i]
-  //    << " " << Eypfile[i] << " " << Ezpfile[i] << std::endl;
-  //}
-      }
-  std::cout << "particle file import done" << std::endl;
-  sim::Array<gitr_precision> pSurfNormX(nP), pSurfNormY(nP), pSurfNormZ(nP), px(nP),
-      py(nP), pz(nP), pvx(nP), pvy(nP), pvz(nP);
-  int surfIndexMod = 0;
-  gitr_precision eVec[3] = {0.0};
+      if (totalParticles != nP) {
+            std::cout << "ERROR: Mismatch in total number of particles."
+                      << "\nExpected: " << nP
+                      << "\nReceived from initial conditions: " << totalParticles
+                      << "\nPlease check the impurity sources initial conditions - numberParticles and nP."
+                      << std::endl;
+        }
+      
   for (int i = 0; i < nP; i++) {
-  //std::cout<< "setting particle " << i << std::endl;
-  /* Captain! Decayed block below */
-      /*
-    if( PARTICLE_SOURCE_SPACE > 0 )
-    {
-    {
-    surfIndexMod = i % nSourceSurfaces;
-    gitr_precision xCentroid = (boundaries[sourceElements[surfIndexMod]].x1 +
-                       boundaries[sourceElements[surfIndexMod]].x2 +
-                       boundaries[sourceElements[surfIndexMod]].x3) /
-                      3.0;
-    gitr_precision yCentroid = (boundaries[sourceElements[surfIndexMod]].y1 +
-                       boundaries[sourceElements[surfIndexMod]].y2 +
-                       boundaries[sourceElements[surfIndexMod]].y3) /
-                      3.0;
-    gitr_precision zCentroid = (boundaries[sourceElements[surfIndexMod]].z1 +
-                       boundaries[sourceElements[surfIndexMod]].z2 +
-                       boundaries[sourceElements[surfIndexMod]].z3) /
-                      3.0;
-    gitr_precision bufferLaunch = 1.0e-4;
-    x = xCentroid -
-        bufferLaunch * boundaries[sourceElements[surfIndexMod]].a /
-            boundaries[sourceElements[surfIndexMod]]
-                .plane_norm; // boundaries[sourceElements[surfIndexMod]].x1;
-    y = yCentroid -
-        bufferLaunch * boundaries[sourceElements[surfIndexMod]].b /
-            boundaries[sourceElements[surfIndexMod]]
-                .plane_norm; // boundaries[sourceElements[surfIndexMod]].y1;
-    z = zCentroid -
-        bufferLaunch * boundaries[sourceElements[surfIndexMod]].c /
-            boundaries[sourceElements[surfIndexMod]]
-                .plane_norm; // boundaries[sourceElements[surfIndexMod]].z1;
-//#else
-    }
-    else
-    {
-    // x = sampled
-    rand0 = dist01(s0);
-    gitr_precision distAlongSegs =
-        interp1dUnstructured(rand0, nSourceElements, accumulatedLengthArea,
-                             &particleSourceSpaceCDF[0], lowInd);
-    currentSegment = particleSourceIndices[lowInd];
-    std::cout << "rand of " << rand0 << " puts the particle " << distAlongSegs
-              << " along the segments on the boundary element "
-              << currentSegment << std::endl;
-    gitr_precision parVec[3] = {0.0};
-    boundaries[currentSegment].getSurfaceParallel(parVec);
-    x = particleSourceX[lowInd] + (rand0 - particleSourceSpaceCDF[lowInd]) /
-                                      (particleSourceSpaceCDF[lowInd + 1] -
-                                       particleSourceSpaceCDF[lowInd]) *
-                                      sourceSampleResolution * parVec[0];
-    y = 0.0;
-    z = particleSourceZ[lowInd] + (rand0 - particleSourceSpaceCDF[lowInd]) /
-                                      (particleSourceSpaceCDF[lowInd + 1] -
-                                       particleSourceSpaceCDF[lowInd]) *
-                                      sourceSampleResolution * parVec[2];
-    gitr_precision buffer = 1e-6; // 0.0;//2e-6;
-    x = x - buffer * boundaries[currentSegment].a /
-                boundaries[currentSegment]
-                    .plane_norm; // boundaries[sourceElements[surfIndexMod]].x1;
-    z = z - buffer * boundaries[currentSegment].c /
-                boundaries[currentSegment]
-                    .plane_norm; // boundaries[sourceElements[surfIndexMod]].z1;
-//#endif
-    }
-    }
-      */
-      /* Captain! Another decayed block */
-      /*
-#if PARTICLE_SOURCE_ENERGY > 0
-    randE = dist01E(sE);
-#if PARTICLE_SOURCE_ENERGY == 1
-    E = interp1dUnstructured(randE, nThompDistPoints, max_Energy,
-                             &CumulativeDFThompson.front(), lowIndE);
-#elif PARTICLE_SOURCE_ENERGY == 2
-    gitr_precision localT = interp2dCombined(x, y, z, nR_Temp, nZ_Temp, TempGridr.data(),
-                                    TempGridz.data(), ti.data());
-    gitr_precision localBnorm[3] = {0.0};
-    interp2dVector(&localBnorm[0], x, y, z, nR_Bfield, nZ_Bfield,
-                   bfieldGridr.data(), bfieldGridz.data(), br.data(), bz.data(),
-                   by.data());
-    vectorNormalize(localBnorm, localBnorm);
-    boundaries[currentSegment].getSurfaceNormal(perpVec);
-    bDotSurfaceNorm = std::abs(vectorDotProduct(localBnorm, perpVec));
-    gitr_precision localAngle = std::acos(bDotSurfaceNorm) * 180 / 3.1415;
-    gitr_precision sputtE =
-        interp3d(randE, localAngle, std::log10(3.0 * localT),
-                 nEdistBins_surfaceModel, nA_surfaceModel, nE_surfaceModel,
-                 energyDistGrid01.data(), A_surfaceModel.data(),
-                 Elog_surfaceModel.data(), energyDist_CDFregrid.data());
-    E = sputtE;
-    std::cout << "randE of " << randE << " with localAngle " << localAngle
-              << " and local potential " << 3.0 * localT
-              << " puts the particle energy to " << E << std::endl;
-#endif
-#endif
-              */
-              if( particle_source_angle == 1 )
-              {
-    Ex = -E * boundaries[currentSegment].a /
-         boundaries[currentSegment].plane_norm;
-    Ey = -E * boundaries[currentSegment].b /
-         boundaries[currentSegment].plane_norm;
-    Ez = -E * boundaries[currentSegment].c /
-         boundaries[currentSegment].plane_norm;
-              }
-
-    /* Captain! Decayed code block below */
-    /*
-    randA = dist01A(sA);
-    gitr_precision sputtA =
-        interp3d(randA, localAngle, std::log10(3.0 * localT),
-                 nAdistBins_surfaceModel, nA_surfaceModel, nE_surfaceModel,
-                 cosDistGrid01.data(), A_surfaceModel.data(),
-                 Elog_surfaceModel.data(), cosDist_CDFregrid.data());
-    phi = sputtA * 3.141592653589793 / 180.0;
-    std::cout << "sputtA and phi " << sputtA << " " << phi << std::endl;
-    randA = dist01A(sA);
-    theta = 2.0 * 3.141592653589793 * randA;
-    std::cout << "randA and theta " << randA << " " << theta << std::endl;
-    Ex = E * std::sin(phi) * std::cos(theta);
-    Ey = E * std::sin(phi) * std::sin(theta);
-    Ez = E * std::cos(phi);
-    std::cout << "randA of " << randA << " puts the particle angle phi to "
-              << phi << std::endl;
-    std::cout << "E of particle " << Ex << " " << Ey << " " << Ez << " "
+    std::cout << "px py pz pvx pvy pvz pamu pZ pcharge " << px[i] << " " << py[i]
+              << " " << pz[i] << " " << pvx[i] << " " << pvy[i] << " " << pvz[i]
+              << " " << pamu[i] << " " << pZ[i] << " " << pcharge[i]
               << std::endl;
-    std::cout << "current segment and perpVec " << currentSegment << " "
-              << perpVec[0] << " " << perpVec[1] << " " << perpVec[2]
-              << std::endl;
-    gitr_precision Ezx = std::sqrt(Ez * Ez + Ex * Ex);
-    gitr_precision thetaEzx = atan2(Ez, Ex);
-    std::cout << "Ezx thetaEzx " << Ezx << " " << thetaEzx << std::endl;
-    // positive slope equals negative upward normal
-    theta_transform =
-        std::acos(perpVec[2]); //-std::copysign(1.0,boundaries[currentSegment].slope_dzdx)*
-    // if(perpVec[2]==0.0)
-    //{
-    //    if(perpVec[0] > 0.0)
-    //    {
-    //      theta_transform = 0.5*3.141592653589793;
-    //      std::cout << "Vertical line element perpVec " << perpVec[0] << " "
-    //      << perpVec[1] << " " << perpVec[2] << " " << theta_transform <<
-    //      std::endl;
-    //    }
-    //    else if(perpVec[0] < 0.0)
-    //    {
-    //      theta_transform = 1.5*3.141592653589793;
-    //      std::cout << "Vertical line element perpVec " << perpVec[0] << " "
-    //      << perpVec[1] << " " << perpVec[2] << " " << theta_transform <<
-    //      std::endl;
-    //    }
-    //}
-    Ex = Ezx * std::cos(thetaEzx - theta_transform);
-    // Ey = E*sin(phi+theta_transform)*sin(theta);
-    Ez = Ezx * std::sin(thetaEzx - theta_transform);
-    std::cout << "theta transform " << theta_transform << std::endl;
-    eVec[0] = Ex;
-    eVec[1] = Ey;
-    eVec[2] = Ez;
-    gitr_precision EdotP = vectorDotProduct(perpVec, eVec);
-    if (EdotP < 0.0) {
-      std::cout << "This dot product negative " << std::endl;
-      Ex = -Ex;
-      Ez = -Ez;
-    }
-    // Ex_prime = Ex*cos(theta_transform) - Ez*sin(theta_transform);
-    // Ez_prime = Ex*sin(theta_transform) + Ez*cos(theta_transform);
-    // Ex = Ex_prime;
-    // Ez = Ez_prime;
-    std::cout << "Transformed E " << Ex << " " << Ey << " " << Ez << " "
-              << std::endl;
-    // particleArray->setParticle(i,x, y, z, Ex, Ey,Ez, Z, amu, charge);
-    */
-
-   if( particle_source_file > 0 ) 
-   {
-    x = xpfile[i];
-    y = ypfile[i];
-    z = zpfile[i];
-    vx = vxpfile[i];
-    vy = vypfile[i];
-    vz = vzpfile[i];
-    }
-    particleArray->setParticleV(i, x, y, z, vx, vy, vz, Z, amu, charge,dt);
-
-    if( particle_source_space > 0 )
-    {
-    pSurfNormX[i] =
-        -boundaries[currentSegment].a / boundaries[currentSegment].plane_norm;
-    pSurfNormY[i] =
-        -boundaries[currentSegment].b / boundaries[currentSegment].plane_norm;
-    pSurfNormZ[i] =
-        -boundaries[currentSegment].c / boundaries[currentSegment].plane_norm;
-    }
-    px[i] = x;
-    py[i] = y;
-    pz[i] = z;
-    pvx[i] = vx;
-    pvy[i] = vy;
-    pvz[i] = vz;
   }
-#if USE_MPI > 0
-  if (world_rank == 0) {
-#endif
+
+  for (int i = 0; i < nP; i++) {
+    particleArray->setParticleV(i, px[i], py[i], pz[i], pvx[i], pvy[i], pvz[i], pZ[i], pamu[i], pcharge[i], dt);
+        printf("Particle positions and velocities are %d %g %g %g %g %g %g %g %g %g %g \n", i, px[i], py[i], pz[i], pvx[i], pvy[i], pvz[i], pZ[i], pamu[i], pcharge[i], dt);
+  }
+
     std::cout << "writing particles out file" << std::endl;
     netCDF::NcFile ncFile_particles("output/particleSource.nc", netCDF::NcFile::replace);
     netCDF::NcDim pNP = ncFile_particles.addDim("nP", nP);
@@ -3849,41 +3305,20 @@ if( presheath_interp == 1 )
     netCDF::NcVar p_x = ncFile_particles.addVar("x", netcdf_precision, pNP);
     netCDF::NcVar p_y = ncFile_particles.addVar("y", netcdf_precision, pNP);
     netCDF::NcVar p_z = ncFile_particles.addVar("z", netcdf_precision, pNP);
-    p_surfNormx.putVar(&pSurfNormX[0]);
-    p_surfNormy.putVar(&pSurfNormY[0]);
-    p_surfNormz.putVar(&pSurfNormZ[0]);
+    netCDF::NcVar p_charge = ncFile_particles.addVar("charge", netcdf_precision, pNP);
+    netCDF::NcVar p_amu = ncFile_particles.addVar("amu", netcdf_precision, pNP);
+    netCDF::NcVar p_Z = ncFile_particles.addVar("Z", netcdf_precision, pNP);
     p_vx.putVar(&pvx[0]);
     p_vy.putVar(&pvy[0]);
     p_vz.putVar(&pvz[0]);
     p_x.putVar(&px[0]);
     p_y.putVar(&py[0]);
     p_z.putVar(&pz[0]);
+    p_charge.putVar(&pcharge[0]);
+    p_amu.putVar(&pamu[0]);
+    p_Z.putVar(&pZ[0]);
     ncFile_particles.close();
     std::cout << "finished writing particles out file" << std::endl;
-#if USE_MPI > 0
-  }
-#endif
-
-  /*
-  if( GEOM_TRACE > 0 )
-  {
-  std::uniform_real_distribution<gitr_precision> dist2(0, 1);
-  // std::random_device rd2;
-  // std::default_random_engine generator2(rd2());
-  gitr_precision randDevice02 = 6.52E+5;
-  std::default_random_engine generatorTrace(randDevice02);
-  std::cout << "Randomizing velocities to trace geometry. " << std::endl;
-
-  for (int i = 0; i < nParticles; i++) {
-    gitr_precision theta_trace = dist2(generatorTrace) * 2 * 3.1415;
-    gitr_precision phi_trace = dist2(generatorTrace) * 3.1415;
-    gitr_precision mag_trace = 2e3;
-    particleArray->vx[i] = mag_trace * std::cos(theta_trace) * std::sin(phi_trace);
-    particleArray->vy[i] = mag_trace * std::sin(theta_trace) * std::sin(phi_trace);
-    particleArray->vz[i] = mag_trace * std::cos(phi_trace);
-  }
-  }
-  */
 
   int subSampleFac = 1;
   if (world_rank == 0) {
@@ -3945,17 +3380,6 @@ if( presheath_interp == 1 )
   std::cout << "Beginning random number seeds" << std::endl;
   std::uniform_real_distribution<gitr_precision> dist(0, 1e6);
 
-//if FIXEDSEEDS == 0
-//{
-  //std::random_device rd;
-  //std::default_random_engine generator(getVariable_cfg<int> (cfg,"operators.ionization.seed"));
-  //std::default_random_engine generator1(rd());
-  //std::default_random_engine generator2(rd());
-  //std::default_random_engine generator3(rd());
-  //std::default_random_engine generator4(rd());
-  //std::default_random_engine generator5(rd());
-  //std::default_random_engine generator6(rd());
-//}
 
   thrust::counting_iterator<std::size_t> particleBegin(pStartIndx[world_rank]);
   thrust::counting_iterator<std::size_t> particleEnd(
@@ -3986,27 +3410,14 @@ if( presheath_interp == 1 )
   dev_i[0] = 0;
   std::cout << " about to do curandInit" << std::endl;
   thrust::for_each(thrust::device, particleBegin, particleEnd,
-                   // thrust::for_each(thrust::device,particleBegin+
-                   // world_rank*nP/world_size,particleBegin +
-                   // (world_rank+1)*nP/world_size-10,
-                   // curandInitialize(&state1[0],randDeviceInit,0));
                    curandInitialize<>( &state1.front(), fixed_seeds ));
   std::cout << " finished curandInit" << std::endl;
 #else
   std::random_device randDeviceInit;
-  // thrust::for_each(thrust::device,particleBegin+
-  // world_rank*nP/world_size,particleBegin + (world_rank+1)*nP/world_size,
-  //                     curandInitialize(&state1[0],randDeviceInit,0));
-  // std::mt19937 s0(randDeviceInit);
+
   thrust::for_each( thrust::device, particleBegin, particleEnd,
                     curandInitialize<>( &state1.front(), fixed_seeds ) );
-  /*
-  for (int i = world_rank * nP / world_size;
-       i < (world_rank + 1) * nP / world_size; i++) {
-    std::mt19937 s0(randDeviceInit());
-    state1[i] = s0;
-  }
-  */
+
 #endif
 #if USE_CUDA
   cudaDeviceSynchronize();
@@ -4044,8 +3455,7 @@ if( presheath_interp == 1 )
       cylsymm,
       max_dt);
 
-  //void (*bor)(std::size_t) = &move_boris::operator2;
-  //auto bor1 = *bor;
+
   geometry_check geometry_check0(
       particleArray, nLines, &boundaries[0], surfaces, dt, nHashes,
       nR_closeGeom.data(), nY_closeGeom.data(), nZ_closeGeom.data(),
@@ -4131,152 +3541,151 @@ if( presheath_interp == 1 )
                    &velocityHistoryZ.front(), &chargeHistory.front(),
                    &weightHistory.front());
 
-  if( force_eval > 0 )
-  {
-  if (world_rank == 0) {
-    int nR_force, nZ_force;
-    gitr_precision forceX0, forceX1, forceZ0, forceZ1, testEnergy;
-    std::string forceCfg = "forceEvaluation.";
 
-    getVariable(cfg, forceCfg + "nR", nR_force);
-    getVariable(cfg, forceCfg + "nZ", nZ_force);
-    std::vector<gitr_precision> forceR(nR_force, 0.0), forceZ(nZ_force, 0.0);
-    std::vector<gitr_precision> tIon(nR_force * nZ_force, 0.0),
-        tRecomb(nR_force * nZ_force, 0.0);
-    std::vector<gitr_precision> dvEr(nR_force * nZ_force, 0.0),
-        dvEz(nR_force * nZ_force, 0.0), dvEt(nR_force * nZ_force, 0.0);
-    std::vector<gitr_precision> dvBr(nR_force * nZ_force, 0.0),
-        dvBz(nR_force * nZ_force, 0.0), dvBt(nR_force * nZ_force, 0.0);
-    std::vector<gitr_precision> dvCollr(nR_force * nZ_force, 0.0),
-        dvCollz(nR_force * nZ_force, 0.0), dvCollt(nR_force * nZ_force, 0.0);
-    std::vector<gitr_precision> dvITGr(nR_force * nZ_force, 0.0),
-        dvITGz(nR_force * nZ_force, 0.0), dvITGt(nR_force * nZ_force, 0.0);
-    std::vector<gitr_precision> dvETGr(nR_force * nZ_force, 0.0),
-        dvETGz(nR_force * nZ_force, 0.0), dvETGt(nR_force * nZ_force, 0.0);
-    getVariable(cfg, forceCfg + "X0", forceX0);
-    getVariable(cfg, forceCfg + "X1", forceX1);
-    getVariable(cfg, forceCfg + "Z0", forceZ0);
-    getVariable(cfg, forceCfg + "Z1", forceZ1);
-    getVariable(cfg, forceCfg + "particleEnergy", testEnergy);
-    for (int i = 0; i < nR_force; i++) {
-      forceR[i] = forceX0 + (forceX1 - forceX0) * i / (nR_force - 1);
-    }
-    for (int i = 0; i < nZ_force; i++) {
-      forceZ[i] = forceZ0 + (forceZ1 - forceZ0) * i / (nZ_force - 1);
-    }
-    gitr_precision Btotal = 0.0;
-    for (int i = 0; i < nR_force; i++) {
-      for (int j = 0; j < nZ_force; j++) {
-        interp2dVector(&Btest[0], forceR[i], 0.0, forceZ[j], nR_Bfield,
-                       nZ_Bfield, bfieldGridr.data(), bfieldGridz.data(),
-                       br.data(), bz.data(), by.data(), cylsymm );
-        Btotal = vectorNorm(Btest);
-        // std::cout << "node " << world_rank << "Bfield at  "<< forceR[i] << "
-        // " << forceZ[j]<< " " << Btest[0] << " " << Btest[1] <<
-        gitr_precision testTi =
-            interp2dCombined(0.0, 0.1, 0.0, nR_Temp, nZ_Temp, TempGridr.data(),
-                             TempGridz.data(), ti.data(), cylsymm );
-        //std::cout << "Finished Temperature import " << testVec << std::endl;
-        //" " << Btest[2] << " " << Btotal << std::endl;
-        particleArray->setParticle(0, forceR[i], 0.0, forceZ[j], testTi, 0.0,
-                                   0.0, Z, amu, charge + 1.0);
-        move_boris0(0);
+//// AD: FIXME ////
 
-        if( ionization > 0 )
-        {
-          thrust::for_each(thrust::device,particleBegin,particleBegin,ionize0);
-	        thrust::for_each(thrust::device,particleBegin,particleBegin,recombine0);
-        }
+//   if( force_eval > 0 )
+//   {
+//   if (world_rank == 0) {
+//     int nR_force, nZ_force;
+//     gitr_precision forceX0, forceX1, forceZ0, forceZ1, testEnergy;
+//     std::string forceCfg = "forceEvaluation.";
 
-        if( coulomb_collisions > 0 )
-        {
-        thrust::for_each(thrust::device,particleBegin,particleBegin,coulombCollisions0);
-        }
+//     getVariable(cfg, forceCfg + "nR", nR_force);
+//     getVariable(cfg, forceCfg + "nZ", nZ_force);
+//     std::vector<gitr_precision> forceR(nR_force, 0.0), forceZ(nZ_force, 0.0);
+//     std::vector<gitr_precision> tIon(nR_force * nZ_force, 0.0),
+//         tRecomb(nR_force * nZ_force, 0.0);
+//     std::vector<gitr_precision> dvEr(nR_force * nZ_force, 0.0),
+//         dvEz(nR_force * nZ_force, 0.0), dvEt(nR_force * nZ_force, 0.0);
+//     std::vector<gitr_precision> dvBr(nR_force * nZ_force, 0.0),
+//         dvBz(nR_force * nZ_force, 0.0), dvBt(nR_force * nZ_force, 0.0);
+//     std::vector<gitr_precision> dvCollr(nR_force * nZ_force, 0.0),
+//         dvCollz(nR_force * nZ_force, 0.0), dvCollt(nR_force * nZ_force, 0.0);
+//     std::vector<gitr_precision> dvITGr(nR_force * nZ_force, 0.0),
+//         dvITGz(nR_force * nZ_force, 0.0), dvITGt(nR_force * nZ_force, 0.0);
+//     std::vector<gitr_precision> dvETGr(nR_force * nZ_force, 0.0),
+//         dvETGz(nR_force * nZ_force, 0.0), dvETGt(nR_force * nZ_force, 0.0);
+//     getVariable(cfg, forceCfg + "X0", forceX0);
+//     getVariable(cfg, forceCfg + "X1", forceX1);
+//     getVariable(cfg, forceCfg + "Z0", forceZ0);
+//     getVariable(cfg, forceCfg + "Z1", forceZ1);
+//     getVariable(cfg, forceCfg + "particleEnergy", testEnergy);
+//     for (int i = 0; i < nR_force; i++) {
+//       forceR[i] = forceX0 + (forceX1 - forceX0) * i / (nR_force - 1);
+//     }
+//     for (int i = 0; i < nZ_force; i++) {
+//       forceZ[i] = forceZ0 + (forceZ1 - forceZ0) * i / (nZ_force - 1);
+//     }
+//     gitr_precision Btotal = 0.0;
+//     for (int i = 0; i < nR_force; i++) {
+//       for (int j = 0; j < nZ_force; j++) {
+//         interp2dVector(&Btest[0], forceR[i], 0.0, forceZ[j], nR_Bfield,
+//                        nZ_Bfield, bfieldGridr.data(), bfieldGridz.data(),
+//                        br.data(), bz.data(), by.data(), cylsymm );
+//         Btotal = vectorNorm(Btest);
+//         gitr_precision testTi =
+//             interp2dCombined(0.0, 0.1, 0.0, nR_Temp, nZ_Temp, TempGridr.data(),
+//                              TempGridz.data(), ti.data(), cylsymm );
+//         particleArray->setParticle(0, forceR[i], 0.0, forceZ[j], testTi, 0.0,
+//                                    0.0, Z, amu, charge + 1.0);
+//         move_boris0(0);
 
-        if( thermal_force > 0 )
-        {
-        thrust::for_each(thrust::device,particleBegin,particleBegin,thermalForce0);
-        }
-        dvEr[j * nR_force + i] = move_boris0.electricForce[0];
-        dvEz[j * nR_force + i] = move_boris0.electricForce[2];
-        dvEt[j * nR_force + i] = move_boris0.electricForce[1];
-        dvBr[j * nR_force + i] = move_boris0.magneticForce[0];
-        dvBz[j * nR_force + i] = move_boris0.magneticForce[2];
-        dvBt[j * nR_force + i] = move_boris0.magneticForce[1];
+//         if( ionization > 0 )
+//         {
+//           thrust::for_each(thrust::device,particleBegin,particleBegin,ionize0);
+// 	        thrust::for_each(thrust::device,particleBegin,particleBegin,recombine0);
+//         }
 
-        if( ionization > 0 )
-        {
-          tIon[j * nR_force + i] = ionize0.tion;
-          tRecomb[j * nR_force + i] = recombine0.tion;
-        }
+//         if( coulomb_collisions > 0 )
+//         {
+//         thrust::for_each(thrust::device,particleBegin,particleBegin,coulombCollisions0);
+//         }
 
-        if( coulomb_collisions > 0 )
-        {
-        dvCollr[j * nR_force + i] = coulombCollisions0.dv[0];
-        dvCollz[j * nR_force + i] = coulombCollisions0.dv[2];
-        dvCollt[j * nR_force + i] = coulombCollisions0.dv[1];
-        }
-        if( thermal_force > 0 )
-        {
-        dvITGr[j * nR_force + i] = thermalForce0.dv_ITGx;
-        dvITGz[j * nR_force + i] = thermalForce0.dv_ITGz;
-        dvITGt[j * nR_force + i] = thermalForce0.dv_ITGy;
-        dvETGr[j * nR_force + i] = thermalForce0.dv_ETGx;
-        dvETGz[j * nR_force + i] = thermalForce0.dv_ETGz;
-        dvETGt[j * nR_force + i] = thermalForce0.dv_ETGy;
-        }
-      }
-    }
-    std::cout << " about to write ncFile_forces " << std::endl;
-    netCDF::NcFile ncFile_force("output/forces.nc", netCDF::NcFile::replace);
-    netCDF::NcDim nc_nRf = ncFile_force.addDim("nR", nR_force);
-    netCDF::NcDim nc_nZf = ncFile_force.addDim("nZ", nZ_force);
-    vector<netCDF::NcDim> forceDims;
-    forceDims.push_back(nc_nZf);
-    forceDims.push_back(nc_nRf);
-    netCDF::NcVar forceRf = ncFile_force.addVar("r", netcdf_precision, nc_nRf);
-    netCDF::NcVar forceZf = ncFile_force.addVar("z", netcdf_precision, nc_nZf);
-    netCDF::NcVar nction = ncFile_force.addVar("tIon", netcdf_precision, forceDims);
-    netCDF::NcVar nctrec = ncFile_force.addVar("tRec", netcdf_precision, forceDims);
-    netCDF::NcVar dvErf = ncFile_force.addVar("dvEr", netcdf_precision, forceDims);
-    netCDF::NcVar dvEzf = ncFile_force.addVar("dvEz", netcdf_precision, forceDims);
-    netCDF::NcVar dvEtf = ncFile_force.addVar("dvEt", netcdf_precision, forceDims);
-    netCDF::NcVar dvBrf = ncFile_force.addVar("dvBr", netcdf_precision, forceDims);
-    netCDF::NcVar dvBzf = ncFile_force.addVar("dvBz", netcdf_precision, forceDims);
-    netCDF::NcVar dvBtf = ncFile_force.addVar("dvBt", netcdf_precision, forceDims);
-    netCDF::NcVar dvCollrf = ncFile_force.addVar("dvCollr", netcdf_precision, forceDims);
-    netCDF::NcVar dvCollzf = ncFile_force.addVar("dvCollz", netcdf_precision, forceDims);
-    netCDF::NcVar dvColltf = ncFile_force.addVar("dvCollt", netcdf_precision, forceDims);
-    netCDF::NcVar dvITGrf = ncFile_force.addVar("dvITGr", netcdf_precision, forceDims);
-    netCDF::NcVar dvITGzf = ncFile_force.addVar("dvITGz", netcdf_precision, forceDims);
-    netCDF::NcVar dvITGtf = ncFile_force.addVar("dvITGt", netcdf_precision, forceDims);
-    netCDF::NcVar dvETGrf = ncFile_force.addVar("dvETGr", netcdf_precision, forceDims);
-    netCDF::NcVar dvETGzf = ncFile_force.addVar("dvETGz", netcdf_precision, forceDims);
-    netCDF::NcVar dvETGtf = ncFile_force.addVar("dvETGt", netcdf_precision, forceDims);
-    forceRf.putVar(&forceR[0]);
-    forceZf.putVar(&forceZ[0]);
-    nction.putVar(&tIon[0]);
-    nctrec.putVar(&tRecomb[0]);
-    dvErf.putVar(&dvEr[0]);
-    dvEzf.putVar(&dvEz[0]);
-    dvEtf.putVar(&dvEt[0]);
-    dvBrf.putVar(&dvBr[0]);
-    dvBzf.putVar(&dvBz[0]);
-    dvBtf.putVar(&dvBt[0]);
-    dvCollrf.putVar(&dvCollr[0]);
-    dvCollzf.putVar(&dvCollz[0]);
-    dvColltf.putVar(&dvCollt[0]);
-    dvITGrf.putVar(&dvITGr[0]);
-    dvITGzf.putVar(&dvITGz[0]);
-    dvITGtf.putVar(&dvITGt[0]);
-    dvETGrf.putVar(&dvETGr[0]);
-    dvETGzf.putVar(&dvETGz[0]);
-    dvETGtf.putVar(&dvETGt[0]);
-    ncFile_force.close();
-    particleArray->setParticleV(0, px[0], py[0], pz[0], pvx[0], pvy[0], pvz[0],
-                                Z, amu, charge, dt);
-  }
-}
+//         if( thermal_force > 0 )
+//         {
+//         thrust::for_each(thrust::device,particleBegin,particleBegin,thermalForce0);
+//         }
+//         dvEr[j * nR_force + i] = move_boris0.electricForce[0];
+//         dvEz[j * nR_force + i] = move_boris0.electricForce[2];
+//         dvEt[j * nR_force + i] = move_boris0.electricForce[1];
+//         dvBr[j * nR_force + i] = move_boris0.magneticForce[0];
+//         dvBz[j * nR_force + i] = move_boris0.magneticForce[2];
+//         dvBt[j * nR_force + i] = move_boris0.magneticForce[1];
+
+//         if( ionization > 0 )
+//         {
+//           tIon[j * nR_force + i] = ionize0.tion;
+//           tRecomb[j * nR_force + i] = recombine0.tion;
+//         }
+
+//         if( coulomb_collisions > 0 )
+//         {
+//         dvCollr[j * nR_force + i] = coulombCollisions0.dv[0];
+//         dvCollz[j * nR_force + i] = coulombCollisions0.dv[2];
+//         dvCollt[j * nR_force + i] = coulombCollisions0.dv[1];
+//         }
+//         if( thermal_force > 0 )
+//         {
+//         dvITGr[j * nR_force + i] = thermalForce0.dv_ITGx;
+//         dvITGz[j * nR_force + i] = thermalForce0.dv_ITGz;
+//         dvITGt[j * nR_force + i] = thermalForce0.dv_ITGy;
+//         dvETGr[j * nR_force + i] = thermalForce0.dv_ETGx;
+//         dvETGz[j * nR_force + i] = thermalForce0.dv_ETGz;
+//         dvETGt[j * nR_force + i] = thermalForce0.dv_ETGy;
+//         }
+//       }
+//     }
+//     std::cout << " about to write ncFile_forces " << std::endl;
+//     netCDF::NcFile ncFile_force("output/forces.nc", netCDF::NcFile::replace);
+//     netCDF::NcDim nc_nRf = ncFile_force.addDim("nR", nR_force);
+//     netCDF::NcDim nc_nZf = ncFile_force.addDim("nZ", nZ_force);
+//     vector<netCDF::NcDim> forceDims;
+//     forceDims.push_back(nc_nZf);
+//     forceDims.push_back(nc_nRf);
+//     netCDF::NcVar forceRf = ncFile_force.addVar("r", netcdf_precision, nc_nRf);
+//     netCDF::NcVar forceZf = ncFile_force.addVar("z", netcdf_precision, nc_nZf);
+//     netCDF::NcVar nction = ncFile_force.addVar("tIon", netcdf_precision, forceDims);
+//     netCDF::NcVar nctrec = ncFile_force.addVar("tRec", netcdf_precision, forceDims);
+//     netCDF::NcVar dvErf = ncFile_force.addVar("dvEr", netcdf_precision, forceDims);
+//     netCDF::NcVar dvEzf = ncFile_force.addVar("dvEz", netcdf_precision, forceDims);
+//     netCDF::NcVar dvEtf = ncFile_force.addVar("dvEt", netcdf_precision, forceDims);
+//     netCDF::NcVar dvBrf = ncFile_force.addVar("dvBr", netcdf_precision, forceDims);
+//     netCDF::NcVar dvBzf = ncFile_force.addVar("dvBz", netcdf_precision, forceDims);
+//     netCDF::NcVar dvBtf = ncFile_force.addVar("dvBt", netcdf_precision, forceDims);
+//     netCDF::NcVar dvCollrf = ncFile_force.addVar("dvCollr", netcdf_precision, forceDims);
+//     netCDF::NcVar dvCollzf = ncFile_force.addVar("dvCollz", netcdf_precision, forceDims);
+//     netCDF::NcVar dvColltf = ncFile_force.addVar("dvCollt", netcdf_precision, forceDims);
+//     netCDF::NcVar dvITGrf = ncFile_force.addVar("dvITGr", netcdf_precision, forceDims);
+//     netCDF::NcVar dvITGzf = ncFile_force.addVar("dvITGz", netcdf_precision, forceDims);
+//     netCDF::NcVar dvITGtf = ncFile_force.addVar("dvITGt", netcdf_precision, forceDims);
+//     netCDF::NcVar dvETGrf = ncFile_force.addVar("dvETGr", netcdf_precision, forceDims);
+//     netCDF::NcVar dvETGzf = ncFile_force.addVar("dvETGz", netcdf_precision, forceDims);
+//     netCDF::NcVar dvETGtf = ncFile_force.addVar("dvETGt", netcdf_precision, forceDims);
+//     forceRf.putVar(&forceR[0]);
+//     forceZf.putVar(&forceZ[0]);
+//     nction.putVar(&tIon[0]);
+//     nctrec.putVar(&tRecomb[0]);
+//     dvErf.putVar(&dvEr[0]);
+//     dvEzf.putVar(&dvEz[0]);
+//     dvEtf.putVar(&dvEt[0]);
+//     dvBrf.putVar(&dvBr[0]);
+//     dvBzf.putVar(&dvBz[0]);
+//     dvBtf.putVar(&dvBt[0]);
+//     dvCollrf.putVar(&dvCollr[0]);
+//     dvCollzf.putVar(&dvCollz[0]);
+//     dvColltf.putVar(&dvCollt[0]);
+//     dvITGrf.putVar(&dvITGr[0]);
+//     dvITGzf.putVar(&dvITGz[0]);
+//     dvITGtf.putVar(&dvITGt[0]);
+//     dvETGrf.putVar(&dvETGr[0]);
+//     dvETGzf.putVar(&dvETGz[0]);
+//     dvETGtf.putVar(&dvETGt[0]);
+//     ncFile_force.close();
+//     particleArray->setParticleV(0, px[0], py[0], pz[0], pvx[0], pvy[0], pvz[0],
+//                                 Z, amu, charge, dt);
+//   }
+// }
 
   auto start_clock = gitr_time::now();
   std::chrono::duration<gitr_precision> fs1 = start_clock - gitr_start_clock;
@@ -4319,47 +3728,18 @@ if( presheath_interp == 1 )
 #if __CUDACC__
   cudaDeviceSynchronize();
 #endif
-  // int nDevices=0;
-  // nDevices = omp_get_num_threads();
-  //    unsigned int cpu_thread_id = omp_get_thread_num();
-  //    unsigned int num_cpu_threads = omp_get_num_threads();
-  //    printf("Number of CPU threads %d (ID %d)\n", cpu_thread_id,
-  //    num_cpu_threads);
 #if USE_MPI > 0
     MPI_Barrier(MPI_COMM_WORLD);
 #endif
     sim::Array<int> tmpInt(1, 1), tmpInt2(1, 1);
-    // int nN=10000;
-    // thrust::host_vector<int> h_vec(nN);
-    // thrust::generate(h_vec.begin(), h_vec.end(), rand);
-    //// transfer data to the device
-    // thrust::device_vector<int> d_vec = h_vec;
-    // float *d_vec2;
-    // cudaMallocManaged(&d_vec2, 1000*sizeof(float));
-    // std::cout << "created d_vec and cmalloc, starting init " << std::endl;
-    // for(int k=0;k<1000;k++)
-    //{   //std::cout << "k " << k << std::endl;
-    //    d_vec2[k] = 1.0;
-    //}
-    // for(int k=0;k<1000;k++)
-    //{   //std::cout << "k " << k << std::endl;
-    //    //d_vec2[k] = 1.0;
-    // thrust::sort(thrust::device,d_vec.begin()+world_rank*nN/world_size,
-    // d_vec.begin()+ (world_rank+1)*nN/world_size-1); // sort data on the device
-    //}
-    //// transfer data back to host
-    // thrust::copy(d_vec.begin(), d_vec.end(), h_vec.begin());
 #ifdef __CUDACC__
     cudaDeviceSynchronize();
 #endif
-    /* this is a 3 level 4-loop to calculate density n = (x, y, q). To show the spacial
-       density and the result. Loop over timesteps, each operator loops over a section of
-       the particles... find 0 */
-    for (tt; tt < nT; tt++) {
+
+    for (int tt; tt < nT; tt++) {
        if( sort_particles > 0 )
        {
        dev_tt[0] = tt;
-      //std::cout << " tt " << tt << std::endl;
       thrust::for_each(thrust::host, particleBegin, particleOne, sort0);
       particleEnd = particleZero + nActiveParticlesOnRank[0];
 #ifdef __CUDACC__
@@ -4371,10 +3751,7 @@ if( presheath_interp == 1 )
       {
       thrust::for_each(thrust::device, particleBegin, particleEnd, history0);
       }
-      // std::cout << " world rank pstart nactive " << world_rank << " " <<
-      // pStartIndx[world_rank] << "  " << nActiveParticlesOnRank[world_rank] <<
-      // std::endl; thrust::for_each(thrust::device,particleBegin,particleOne,
-      //     test_routinePp(particleArray));
+
 
       thrust::for_each(thrust::device, particleBegin, particleEnd, move_boris0);
 #ifdef __CUDACC__
@@ -4426,8 +3803,6 @@ if( presheath_interp == 1 )
     if( particle_tracks > 0 )
     {
     tt = nT;
-    // dev_tt[0] = tt;
-    // std::cout << " tt for final history " << tt << std::endl;
     thrust::for_each(thrust::device, particleBegin, particleEnd, history0);
     }
 
@@ -4440,22 +3815,7 @@ if( presheath_interp == 1 )
   std::chrono::duration<gitr_precision> fs = finish_clock - start_clock;
   printf("Time taken          is %6.3f (secs) \n", fs.count());
   printf("Time taken per step is %6.3f (secs) \n", fs.count() / (gitr_precision)nT);
-  // for(int i=0; i<nP;i++)
-  //{
-  //    std::cout << "Particle test value r1: " << i << " " <<
-  //    particleArray->test[i] << std::endl;
-  //}
 
-  /*
-for(int i=0; i<nP ; i++)
-{
-  std::cout << "particle " << i << " first rnd# " <<
-      particleArray->test[i] << " and x " << particleArray->xprevious[i] <<
-       " hitwall " << particleArray->hitWall[i] <<
-       " trans " << particleArray->transitTime[i] << std::endl;
-}
-*/
-  // float tmp202 =0.0;
 #if USE_CUDA
   cudaDeviceSynchronize();
 #endif
@@ -4593,27 +3953,8 @@ for(int i=0; i<nP ; i++)
   exDispl[1] = 2;
   const int *exdispl = &exDispl[0];
   const int *excount = &exCount[0];
-
-  // MPI_Gatherv(&exampleArray[exDispl[world_rank]],2,MPI_FLOAT,&exampleArrayGather[0],excount,exdispl,MPI_FLOAT,0,MPI_COMM_WORLD);
-
-  // for(int i=0;i<4;i++)
-  //{
-  //  std::cout << "rank " << world_rank << " val " << exampleArrayGather[i] <<
-  //  std::endl;
-  //}
-
   MPI_Barrier(MPI_COMM_WORLD);
 
-  // for(int
-  // i=pDisplacement[world_rank];i<pDisplacement[world_rank]+pHistPerNode[world_rank];i++)
-  //{
-  //  std::cout << "Rank i "<< i << " "  << world_rank << "z " <<
-  //  positionHistoryZ[i] << std::endl;
-  //}
-  // std::cout << "starting particle tracks gather "<< world_rank<< " pstart "<<
-  // pStartIndx[world_rank] << "nhist " << nHistoriesPerParticle << std::endl;
-  // std::cout << "start gather 2 "<< world_rank<< " nppr "<<
-  // nPPerRank[world_rank] << "nhist " << nHistoriesPerParticle << std::endl;
   MPI_Gatherv(&positionHistoryX[pDisplacement[world_rank]],
               pHistPerNode[world_rank], MPI_FLOAT, &positionHistoryXgather[0],
               phpn, displ, MPI_FLOAT, 0, MPI_COMM_WORLD);
@@ -4700,10 +4041,7 @@ for(int i=0; i<nP ; i++)
     printf("Time taken for mpi reduction          is %6.3f (secs) \n",
            fsmpi.count());
   }
-  //    tmp202 =  particleArray->vx[0];
-  // std::cout << "memory access hitwall "
-  //<< particleArray->xprevious[0] << std::endl;
-  // std::cout << "transit time counting " << std::endl;
+
 #if USE_MPI > 0
   if (world_rank == 0) {
 #endif
@@ -4715,16 +4053,6 @@ for(int i=0; i<nP ; i++)
     if( use_3d_geom > 0 )
     {
     gitr_precision meanTransitTime0 = 0.0;
-    /*
-    for (int i=0; i<nP; i++)
-    {
-        std::cout << "loop " << i << std::endl;
-        if(particleArray->hitWall[i] == 1.0)
-        {
-            meanTransitTime0 = meanTransitTime0 + particleArray->transitTime[i];
-        }
-    }
-    */
     meanTransitTime0 = meanTransitTime0 / nP;
     int max_boundary = 0;
     gitr_precision max_impacts = 0.0;
@@ -4735,9 +4063,7 @@ for(int i=0; i<nP ; i++)
     gitr_precision *redeposit = new gitr_precision[nLines];
     gitr_precision *startingParticles = new gitr_precision[nLines];
     gitr_precision *surfZ = new gitr_precision[nLines];
-    // int nA = 90;
-    // int nE = 1000;
-    // float* impactEnergy = new float[nLines*nA*nE];
+
     for (int i = 0; i < nLines; i++) {
       impacts[i] = boundaries[i].impacts;
       redeposit[i] = boundaries[i].redeposit;
@@ -4753,19 +4079,6 @@ for(int i=0; i<nP ; i++)
       xOut[i] = particleArray->x[i];
     }
 
-/*
-sim::Array<float> tally00(nLines,0);
-for (int j=0; j<nP; j++)
-{
-    tally00[particleArray->wallHit[j]] = tally00[particleArray->wallHit[j]] + 1;
-}
-
-std::cout << "bound 164p " << tally00[164] << std::endl;
-std::cout << "bound 255p " << tally00[255] << std::endl;
-
-std::cout << "bound 164 " << boundaries[164].impacts << std::endl;
-std::cout << "bound 255 " << boundaries[255].impacts << std::endl;
-*/
     }
     else
     {
@@ -4801,37 +4114,6 @@ std::cout << "bound 255 " << boundaries[255].impacts << std::endl;
       }
     }
     
-    //#if PARTICLE_SOURCE == 1
-    // int ring1 = 0;
-    // int ring2 = 0;
-    // int noWall = 0;
-    // float meanTransitTime = 0.0;
-    //
-    // for(int i=0; i<nP ; i++)
-    //{
-    //	if(particleArray->wallIndex[i] == boundaryIndex_ImpurityLaunch[0])
-    //	{
-    //		ring1++;
-    //	}
-    //	else if(particleArray->wallIndex[i] == boundaryIndex_ImpurityLaunch[1])
-    //	{
-    //		ring2++;
-    //	}
-    //
-    //	if(particleArray->wallIndex[i] == 0)
-    //	{
-    //		noWall++;
-    //	}
-    //
-    //	meanTransitTime = meanTransitTime + particleArray->transitTime[i];
-    //
-    //}
-    // meanTransitTime = meanTransitTime/(nP-noWall);
-    // std::cout << "Number of impurity particles deposited on ring 1 " << ring1
-    // << std::endl; std::cout << "Number of impurity particles deposited on ring
-    // 2 " << ring2 << std::endl; std::cout << "Number of impurity particles not
-    // deposited " << noWall << std::endl; std::cout << "Mean transit time of
-    // deposited particles " << meanTransitTime << std::endl; #endif
     ofstream outfile2;
     outfile2.open("output/positions.m");
     for (int i = 1; i < nP + 1; i++) {
@@ -4841,6 +4123,7 @@ std::cout << "bound 255 " << boundaries[255].impacts << std::endl;
     }
     outfile2.close();
     // Write netCDF output for positions
+    printf("we are here positions.nc\n");
     netCDF::NcFile ncFile0("output/positions.nc", netCDF::NcFile::replace);
     netCDF::NcDim nc_nP0 = ncFile0.addDim("nP", nP);
     vector<netCDF::NcDim> dims0;
@@ -4861,6 +4144,8 @@ std::cout << "bound 255 " << boundaries[255].impacts << std::endl;
     netCDF::NcVar nc_dist0 = ncFile0.addVar("distTraveled", netcdf_precision, dims0);
     netCDF::NcVar nc_time0 = ncFile0.addVar("time", netcdf_precision, dims0);
     netCDF::NcVar nc_dt0 = ncFile0.addVar("dt", netcdf_precision, dims0);
+    netCDF::NcVar nc_amu0 = ncFile0.addVar("amu", netcdf_precision, dims0);
+    netCDF::NcVar nc_Z0 = ncFile0.addVar("Z", netcdf_precision, dims0);
 #if USE_MPI > 0
     nc_x0.putVar(&xGather[0]);
     nc_y0.putVar(&yGather[0]);
@@ -4874,7 +4159,7 @@ std::cout << "bound 255 " << boundaries[255].impacts << std::endl;
     nc_weight0.putVar(&weightGather[0]);
     nc_charge0.putVar(&chargeGather[0]);
     nc_leak0.putVar(&hasLeakedGather[0]);
-#else
+
   std::cout << "not using mpi output" << std::endl;
   nc_x0.putVar(&particleArray->xprevious[0]);
   nc_y0.putVar(&particleArray->yprevious[0]);
@@ -4891,65 +4176,10 @@ std::cout << "bound 255 " << boundaries[255].impacts << std::endl;
   nc_dist0.putVar(&particleArray->distTraveled[0]);
   nc_time0.putVar(&particleArray->time[0]);
   nc_dt0.putVar(&particleArray->dt[0]);
+  nc_amu0.putVar(&particleArray->amu[0]);
+  nc_Z0.putVar(&particleArray->Z[0]);
 #endif
     ncFile0.close();
-    // auto particleArray2 = new Particles(1);
-    // std::cout << "particleArray2 z weight"<<particleArray2->z[0] << " " <<
-    // particleArray2->weight[0] << std::endl;
-    // particleArray2->setP(particleArray,0,0);
-
-    // std::cout << "particleArray2 z weight"<<particleArray2->z[0] << " " <<
-    // particleArray2->weight[0] << std::endl;
-    // sim::Array<thrust::pair<int,float>> pair1(100);
-    // sim::Array<float> weights1(100,0.0);
-    // sim::Array<float> charge1(particleArray->charge);
-    // charge1=particleArray->weight;
-    // for(int i=0;i<nP;i++) std::cout << " charge "<< i << " "  << charge1[i]
-    // << std::endl;
-    ////thrust::transform(charge1.begin(),
-    // for(int i=0;i<100;i++)
-    //{
-    //  pair1[i].first = i;
-    //  pair1[i].second = 1.0*i;
-    //  weights1[i] = 1.0*i;
-    // std::cout << "pair "  << " " << pair1[i].first << " " << pair1[i].second
-    // << std::endl;
-    ////for (auto it= pair1.begin();it !=pair1.end();it++)
-    ////{
-    ////  //pair1[it]=.first=1;
-    ////  //pair1[it].second=1.0;
-    ////  std::cout << "pair " << it << " " << pair1[it].first << " " <<
-    ///pair1[it].second << std::endl;
-    //}
-    // thrust::sort(pair1.begin(),pair1.end(),ordering());
-    // for(int i=0;i<100;i++)
-    //{
-    // std::cout << "pair "  << " " << pair1[i].first << " " << pair1[i].second
-    // << std::endl; weights1[i] = pair1[i].second;
-    //}
-    // sim::Array<float> weightThreshold(1,38.0);
-    // sim::Array<int> lowerBoundIndex(1,0);
-    // for(int i=0;i<100;i++)
-    //{
-    // std::cout << "weights "  << " " << weights1[i] << " " <<
-    // weightThreshold[0] << std::endl;
-    //}
-    // thrust::lower_bound(weights1.begin(), weights1.end(),
-    //                    weightThreshold.begin(),weightThreshold.end() ,
-    // 		   lowerBoundIndex.begin(),thrust::less<float>());
-    // std::cout << " min index " << lowerBoundIndex[0] << " " <<
-    // weights1[lowerBoundIndex[0]] << std::endl; float tmpWeight = 0.0; for(int
-    // i=0;i<=lowerBoundIndex[0];i++)
-    //{
-    // tmpWeight = weights1[i];
-    // weights1[i] = pair1[100-1-i].second;
-    // weights1[100-1-i] = tmpWeight;
-   //}
-    // for(int i=0;i<100;i++)
-    //{
-    // std::cout << "weights "  << " " << weights1[i] << " " <<
-    // weightThreshold[0] << std::endl;
-    //}
   if( surface_model > 0 || flux_ea > 0 )
   {
 #if USE_MPI > 0
@@ -4989,28 +4219,15 @@ std::cout << "bound 255 " << boundaries[255].impacts << std::endl;
     nc_spylCounts.putVar(&sputtYldCount[0]);
     nc_sumParticlesStrike.putVar(&sumParticlesStrike[0]);
     nc_sumWeightStrike.putVar(&sumWeightStrike[0]);
-    // NcVar nc_surfImpacts = ncFile1.addVar("impacts",netcdf_precision,dims1);
-    // NcVar nc_surfRedeposit = ncFile1.addVar("redeposit",netcdf_precision,dims1);
-    // NcVar nc_surfStartingParticles =
-    // ncFile1.addVar("startingParticles",netcdf_precision,dims1); NcVar nc_surfZ =
-    // ncFile1.addVar("Z",netcdf_precision,dims1);
+
     netCDF::NcVar nc_surfEDist = ncFile1.addVar("surfEDist", netcdf_precision, dimsSurfE);
     netCDF::NcVar nc_surfReflDist = ncFile1.addVar("surfReflDist", netcdf_precision, dimsSurfE);
     netCDF::NcVar nc_surfSputtDist =
         ncFile1.addVar("surfSputtDist", netcdf_precision, dimsSurfE);
-    // nc_surfImpacts.putVar(impacts);
-    //#if USE3DTETGEOM > 0
-    // nc_surfRedeposit.putVar(redeposit);
-    //#endif
-    // nc_surfStartingParticles.putVar(startingParticles);
-    // nc_surfZ.putVar(surfZ);
+
     nc_surfEDist.putVar(&energyDistribution[0]);
     nc_surfReflDist.putVar(&reflDistribution[0]);
     nc_surfSputtDist.putVar(&sputtDistribution[0]);
-    // NcVar nc_surfEDistGrid = ncFile1.addVar("gridE",ncDouble,nc_nEnergies);
-    // nc_surfEDistGrid.putVar(&surfaces->gridE[0]);
-    // NcVar nc_surfADistGrid = ncFile1.addVar("gridA",ncDouble,nc_nAngles);
-    // nc_surfADistGrid.putVar(&surfaces->gridA[0]);
     ncFile1.close();
 #else
     std::vector<int> surfaceNumbers(nSurfaces, 0);
@@ -5050,28 +4267,14 @@ std::cout << "bound 255 " << boundaries[255].impacts << std::endl;
     nc_spylCounts.putVar(&surfaces->sputtYldCount[0]);
     nc_sumParticlesStrike.putVar(&surfaces->sumParticlesStrike[0]);
     nc_sumWeightStrike.putVar(&surfaces->sumWeightStrike[0]);
-    // NcVar nc_surfImpacts = ncFile1.addVar("impacts",netcdf_precision,dims1);
-    // NcVar nc_surfRedeposit = ncFile1.addVar("redeposit",netcdf_precision,dims1);
-    // NcVar nc_surfStartingParticles =
-    // ncFile1.addVar("startingParticles",netcdf_precision,dims1); NcVar nc_surfZ =
-    // ncFile1.addVar("Z",netcdf_precision,dims1);
+
     netCDF::NcVar nc_surfEDist = ncFile1.addVar("surfEDist", netcdf_precision, dimsSurfE);
     netCDF::NcVar nc_surfReflDist = ncFile1.addVar("surfReflDist", netcdf_precision, dimsSurfE);
     netCDF::NcVar nc_surfSputtDist =
         ncFile1.addVar("surfSputtDist", netcdf_precision, dimsSurfE);
-    // nc_surfImpacts.putVar(impacts);
-    //#if USE3DTETGEOM > 0
-    // nc_surfRedeposit.putVar(redeposit);
-    //#endif
-    // nc_surfStartingParticles.putVar(startingParticles);
-    // nc_surfZ.putVar(surfZ);
     nc_surfEDist.putVar(&surfaces->energyDistribution[0]);
     nc_surfReflDist.putVar(&surfaces->reflDistribution[0]);
     nc_surfSputtDist.putVar(&surfaces->sputtDistribution[0]);
-    // NcVar nc_surfEDistGrid = ncFile1.addVar("gridE",ncDouble,nc_nEnergies);
-    // nc_surfEDistGrid.putVar(&surfaces->gridE[0]);
-    // NcVar nc_surfADistGrid = ncFile1.addVar("gridA",ncDouble,nc_nAngles);
-    // nc_surfADistGrid.putVar(&surfaces->gridA[0]);
     ncFile1.close();
   }
 #endif
@@ -5099,14 +4302,6 @@ std::cout << "bound 255 " << boundaries[255].impacts << std::endl;
     netCDF::NcVar nc_charge = ncFile_hist.addVar("charge", netCDF::ncDouble, dims_hist);
     netCDF::NcVar nc_weight = ncFile_hist.addVar("weight", netCDF::ncDouble, dims_hist);
 #if USE_MPI > 0
-    // if(world_rank ==0)
-    //{
-    // for(int i=0;i<401;i++)
-    //{
-    //  std::cout << "Rank " << world_rank << "z " << positionHistoryZgather[i]
-    //  << std::endl;
-    //}
-    //}
     nc_x.putVar(&positionHistoryXgather[0]);
     nc_y.putVar(&positionHistoryYgather[0]);
     nc_z.putVar(&positionHistoryZgather[0]);
@@ -5177,28 +4372,8 @@ std::cout << "bound 255 " << boundaries[255].impacts << std::endl;
     cudaDeviceSynchronize();
 #endif
 #if USE_MPI > 0
-/*
-    for(int i=0;i<100;i++)
-{
-    std::cout << "tests " << particleArray->test[i] << " "<<
-particleArray->test0[i] <<" "<< particleArray->test1[i] << " " <<
-particleArray->test2[i] << " " << particleArray->test3[i] << " " <<
-particleArray->test4[i] << std::endl;
-}
-    for(int i=0;i<100;i++)
-{
-    //std::cout << "particle ionization z and t " << firstIonizationZGather[i]
-<< " " << firstIonizationTGather[i] << " " << xGather[i] << " " <<
-      //vxGather[i] << " " << chargeGather[i] << std::endl;
-}
-*/
+
 #endif
-//    for(int i=0;i<100;i++)
-//{
-//    std::cout << "reflected/sputtered energy " <<
-//    particleArray->newVelocity[i]   << std::endl;
-//}
-//#endif
 #if USE_MPI > 0
   }
 #endif
