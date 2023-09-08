@@ -34,6 +34,7 @@ set( non_gpu_targets
 set( gpu_targets
      surface_model
      interp2d
+     interpolator2
      interpRateCoeff
      ionize
      boris

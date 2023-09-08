@@ -1,7 +1,7 @@
 # Link previously defined CMake compilation "targets" together as needed
 
 # link source targets
-target_link_libraries( ionize interpRateCoeff )
+target_link_libraries(               interpolator2 ionize interpRateCoeff)
 
 target_link_libraries( interp2d thrust )
 
@@ -11,6 +11,7 @@ target_link_libraries( utils
                        libconfig
                        thrust
                        interp2d
+                       interpolator2
                        netcdf )
 
 target_link_libraries( boris thrust )
@@ -32,6 +33,7 @@ target_link_libraries( geometry_check boris )
 
 # Improvement: Conditionally link based on whether the GITR_USE_<component> clause is enabled
 target_link_libraries( GITR 
+              interpolator2
                        ionize
                        interp2d
                        netcdf 
