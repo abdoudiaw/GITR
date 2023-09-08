@@ -28,11 +28,9 @@ typedef double gitr_precision;
 typedef float gitr_precision;
 #endif
 
-
 CUDA_CALLABLE_MEMBER_DEVICE
 gitr_precision interp2dCombined ( gitr_precision x, gitr_precision y, gitr_precision z,int nx, int nz,
     gitr_precision* gridx,gitr_precision* gridz,gitr_precision* data );
-
 
 CUDA_CALLABLE_MEMBER_DEVICE
 gitr_precision rateCoeffInterp(int charge, gitr_precision te, gitr_precision ne, int nT, int nD, const std::vector<double>& rateGrid_Tempp, const std::vector<double>& rateGrid_Densp, const std::vector<double>& Ratesp);

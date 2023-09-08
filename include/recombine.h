@@ -10,7 +10,6 @@
 #endif
 
 #include "Particles.h"
-#include "ionize.h"
 #include "flags.hpp"
 #include "processIonizationRecombination.h"
 
@@ -30,6 +29,8 @@ typedef double gitr_precision;
 #else
 typedef float gitr_precision;
 #endif
+
+inline std::vector<std::tuple<size_t, size_t, size_t, std::vector<double>, std::vector<double>, std::vector<double>>> recombinationDataCache;
 
 template <typename T=std::mt19937>
 struct recombine {
@@ -88,8 +89,18 @@ struct recombine {
     if(particlesPointer->charge[indx] > 0)
     {
 
-            // Get data (cache this later)
-    std::tuple<size_t, size_t, size_t, std::vector<double>, std::vector<double>, std::vector<double>> recombinationResult = process_rates(RECOMBINATION, particlesPointer->Z[indx]);
+    // Get recombination data from recombinationDataCache or process it
+    std::tuple<size_t, size_t, size_t, std::vector<double>, std::vector<double>, std::vector<double>> recombinationResult;
+    if(particlesPointer->Z[indx] < recombinationDataCache.size() && recombinationDataCache[particlesPointer->Z[indx]] != std::tuple<size_t, size_t, size_t, std::vector<double>, std::vector<double>, std::vector<double>>()) {
+        recombinationResult = recombinationDataCache[particlesPointer->Z[indx]];
+    } else {
+        recombinationResult = process_rates(RECOMBINATION, particlesPointer->Z[indx]);
+        if(particlesPointer->Z[indx] >= recombinationDataCache.size()) {
+            recombinationDataCache.resize(particlesPointer->Z[indx] + 1);
+        }
+        recombinationDataCache[particlesPointer->Z[indx]] = recombinationResult;
+    }
+    
     size_t nTemperaturesRec = std::get<0>(recombinationResult);
     size_t nDensitiesRec = std::get<1>(recombinationResult);
     size_t nChargeStatesRec = std::get<2>(recombinationResult);

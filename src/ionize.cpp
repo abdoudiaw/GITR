@@ -50,6 +50,9 @@ double get_rand_double(std::mt19937 *state,int indx)
   return r1;
 }
 
+inline std::vector<std::tuple<size_t, size_t, size_t, std::vector<double>, std::vector<double>, std::vector<double>>> ionizationDataCache;
+
+
 template< typename T >
 ionize< T >::ionize(Flags *_flags,
           Particles *_particlesPointer,
@@ -78,15 +81,26 @@ ionize< T >::ionize(Flags *_flags,
         cylsymm( cylsymm_ )
 { }
 
+
 template< typename T >
 CUDA_CALLABLE_MEMBER_DEVICE
 void ionize< T >::operator()(std::size_t indx)
 {
   if (flags->USE_IONIZATION)
   {
-
-      // Get data (cache this later)
-    std::tuple<size_t, size_t, size_t, std::vector<double>, std::vector<double>, std::vector<double>> ionizationResult = process_rates(IONIZATION, particlesPointer->Z[indx]);
+    // Get ionization data from ionizationDataCache or process it
+    std::tuple<size_t, size_t, size_t, std::vector<double>, std::vector<double>, std::vector<double>> ionizationResult;
+    if(particlesPointer->Z[indx] < ionizationDataCache.size() && ionizationDataCache[particlesPointer->Z[indx]] != std::tuple<size_t, size_t, size_t, std::vector<double>, std::vector<double>, std::vector<double>>()) {
+        ionizationResult = ionizationDataCache[particlesPointer->Z[indx]];
+    } else {
+        ionizationResult = process_rates(IONIZATION, particlesPointer->Z[indx]);
+        // Resize the cache vector if needed
+        if(particlesPointer->Z[indx] >= ionizationDataCache.size()) {
+            ionizationDataCache.resize(particlesPointer->Z[indx] + 1);
+        }
+        ionizationDataCache[particlesPointer->Z[indx]] = ionizationResult;
+    }
+    
     size_t nTemperaturesIonize = std::get<0>(ionizationResult);
     size_t nDensitiesIonize = std::get<1>(ionizationResult);
     size_t nChargeStatesIonize = std::get<2>(ionizationResult);
