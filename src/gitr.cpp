@@ -39,17 +39,14 @@
 #include <vector>
 #include "flags.hpp"
 
-// Abdou's modification
-// #include "getParticleData.h"
+// AD
 #include <numeric> 
 #include "getParticleData.h"
 
 #ifdef __CUDACC__
 #include <curand.h>
 #include <curand_kernel.h>
-//#include <experimental/filesystem>
 #else
-//#include <experimental/filesystem>
 #endif
 
 #if USE_MPI
@@ -69,7 +66,6 @@
 #include "config_interface.h"
 #include "CLI/CLI.hpp"
 
-
 using namespace netCDF;
 
 
@@ -84,13 +80,8 @@ netCDF::NcType netcdf_precision = netCDF::ncFloat;
 
 int main(int argc, char **argv, char **envp) {
 
-  /* Placeholder code for runtime CLI */
-
   CLI::App app{ "!" };
-
   std::string file_name = "input/gitrInput.cfg";
-
-  //app.add_option( "-c", file_name, "config filepath" )->required();
   app.add_option( "-c", file_name, "config filepath" );
 
   CLI11_PARSE( app, argc, argv );
@@ -106,7 +97,6 @@ int main(int argc, char **argv, char **envp) {
   int flux_ea = use.get<int>(use::flux_ea);
   int spectroscopy = use.get< int >( use::spectroscopy );
   // hardcoded to 0 for now, taken out of config_interface
-  //int biased_surface = use.get< int >( use::biased_surface );
   int biased_surface = BIASED_SURFACE;
   int use_3d_geom = use.get< int >( use::use_3d_geom );
   int cylsymm = use.get< int >( use::cylsymm );
@@ -120,10 +110,6 @@ int main(int argc, char **argv, char **envp) {
   int particle_source_space = use.get< int >( use::particle_source_space );
   int particle_source_energy = use.get< int >( use::particle_source_energy );
   int particle_source_angle = use.get< int >( use::particle_source_angle );
-
-  //int particle_source_space = use.get< int >( use::particle_source_space );
-  //int particle_source_energy = use.get< int >( use::particle_source_energy );
-  //int particle_source_angle = use.get< int >( use::particle_source_angle );
   int particle_tracks = use.get< int >( use::particle_tracks );
   int presheath_interp = use.get< int >( use::presheath_interp );
   int efield_interp = use.get< int >( use::efield_interp );
@@ -3213,14 +3199,6 @@ if( presheath_interp == 1 )
       }
 
       thrust::for_each(thrust::device, particleBegin, particleEnd, move_boris0);
-
-                  // print particle positions and velocities 
-      for (int i = 0; i < nP; i++) {
- printf(" Particle %i position %g %g %g velocity %g %g %g   charge Z amu %g %g %g \n", i, particleArray->x[i], particleArray->y[i], particleArray->z[i], 
- particleArray->vx[i], particleArray->vy[i], particleArray->vz[i], 
- particleArray->charge[i], particleArray->Z[i], particleArray->amu[i]);
-      }
-
 
 #ifdef __CUDACC__
       // cudaThreadSynchronize();
