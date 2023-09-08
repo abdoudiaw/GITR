@@ -42,7 +42,7 @@
 // Abdou's modification
 // #include "getParticleData.h"
 #include <numeric> 
-
+#include "getParticleData.h"
 
 #ifdef __CUDACC__
 #include <curand.h>
@@ -71,11 +71,6 @@
 
 
 using namespace netCDF;
-
-
-const gitr_precision PI = 3.141592653589793;
-const gitr_precision ELECTRON_CHARGE = 1.602e-19;
-const gitr_precision AMU_CONVERSION = 1.66e-27;
 
 
 #if USE_DOUBLE
@@ -1766,21 +1761,7 @@ if( density_interp == 0 )
                                   &DensGridr.front(), &DensGridz.front(),
                                   &ne.front(), cylsymm )
               << std::endl;
-// for(int i=0;i<100;i++)
-//{
-//    std::cout << i*0.001 << " " <<
-//    interp2dCombined(0.001*i,0.0,0.0,nR_Dens,nZ_Dens,
-//                                     &DensGridr.front(),&DensGridz.front(),&ne.front())
-//                                     << std::endl;
-//}
-// std::cout << " z=0.1" << std::endl;
-// for(int i=0; i<100;i++)
-//{
-//    std::cout << i*0.001 << " " <<
-//    interp2dCombined(0.001*i,0.0,0.1,nR_Dens,nZ_Dens,
-//                                     &DensGridr.front(),&DensGridz.front(),&ne.front())
-//                                     << std::endl;
-//}
+
 #if USE_MPI > 0
   }
   MPI_Bcast(DensGridr.data(), nR_Dens, MPI_FLOAT, 0, MPI_COMM_WORLD);
@@ -2141,141 +2122,6 @@ if( flowv_interp == 1 )
                  gradTiZ.data(), gradTiY.data(), cylsymm );
   std::cout << "thermal gradient interpolation gradTi " << gradTi[0] << " "
             << gradTi[1] << " " << gradTi[2] << " " << std::endl;
-  // Initialization of ionization and recombination coefficients
-  int nCS_Ionize = 1, nCS_Recombine = 1;
-  const char *ionizeNcs, *ionizeNDens, *ionizeNTemp, *ionizeDensGrid,
-      *ionizeTempGrid, *ionizeRCvarChar, *recombNcs, *recombNDens, *recombNTemp,
-      *recombDensGrid, *recombTempGrid, *recombRCvarChar;
-  std::string ionizeFile, recombFile;
-  int nTemperaturesIonize = 1, nDensitiesIonize = 1;
-  int i0, i1, i2, i3, i4;
-  int nTemperaturesRecombine = 1, nDensitiesRecombine = 1;
-
-  sim::Array<gitr_precision> rateCoeff_Ionization(nCS_Ionize * nTemperaturesIonize *
-                                         nDensitiesIonize);
-  sim::Array<gitr_precision> gridTemperature_Ionization(nTemperaturesIonize),
-      gridDensity_Ionization(nDensitiesIonize);
-  sim::Array<gitr_precision> rateCoeff_Recombination(
-      nCS_Recombine * nTemperaturesRecombine * nDensitiesRecombine);
-  sim::Array<gitr_precision> gridTemperature_Recombination(nTemperaturesRecombine),
-      gridDensity_Recombination(nDensitiesRecombine);
-
-  if( ionization > 0 )
-  {
-  if (world_rank == 0) {
-
-    if (cfg.lookupValue("impurityParticleSource.ionization.fileString",
-                        ionizeFile) &&
-        cfg.lookupValue("impurityParticleSource.ionization.nChargeStateString",
-                        ionizeNcs) &&
-        cfg.lookupValue("impurityParticleSource.ionization.DensGridString",
-                        ionizeNDens) &&
-        cfg.lookupValue("impurityParticleSource.ionization.TempGridString",
-                        ionizeNTemp) &&
-        cfg.lookupValue("impurityParticleSource.ionization.TempGridVarName",
-                        ionizeTempGrid) &&
-        cfg.lookupValue("impurityParticleSource.ionization.DensGridVarName",
-                        ionizeDensGrid) &&
-        cfg.lookupValue("impurityParticleSource.ionization.CoeffVarName",
-                        ionizeRCvarChar)) 
-    {
-      std::cout << "Ionization rate coefficient file: " << ionizeFile
-                << std::endl;
-    } 
-
-    else 
-    {
-      std::cout
-          << "ERROR: Could not get ionization string info from input file "
-          << std::endl;
-    }
-    
-    if (cfg.lookupValue("impurityParticleSource.recombination.fileString",
-                        recombFile) &&
-        cfg.lookupValue(
-            "impurityParticleSource.recombination.nChargeStateString",
-            recombNcs) &&
-        cfg.lookupValue("impurityParticleSource.recombination.DensGridString",
-                        recombNDens) &&
-        cfg.lookupValue("impurityParticleSource.recombination.TempGridString",
-                        recombNTemp) &&
-        cfg.lookupValue("impurityParticleSource.recombination.TempGridVarName",
-                        recombTempGrid) &&
-        cfg.lookupValue("impurityParticleSource.recombination.DensGridVarName",
-                        recombDensGrid) &&
-        cfg.lookupValue("impurityParticleSource.recombination.CoeffVarName",
-                        recombRCvarChar)) {
-      std::cout << "Recombination rate coefficient file: " << recombFile
-                << std::endl;
-    } else {
-      std::cout
-          << "ERROR: Could not get ionization string info from input file "
-          << std::endl;
-    }
-    
-    i0 = read_profileNs(input_path + ionizeFile, ionizeNcs, recombNcs,
-                        nCS_Ionize, nCS_Recombine);
-
-    i1 = read_profileNs(input_path + ionizeFile, ionizeNDens, ionizeNTemp,
-                        nDensitiesIonize, nTemperaturesIonize);
-
-    i3 = read_profileNs(input_path + recombFile, recombNDens, recombNTemp,
-                        nDensitiesRecombine, nTemperaturesRecombine);
-  }
-#if USE_MPI > 0
-  MPI_Bcast(&nCS_Ionize, 1, MPI_INT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(&nTemperaturesIonize, 1, MPI_INT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(&nDensitiesIonize, 1, MPI_INT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(&nCS_Recombine, 1, MPI_INT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(&nTemperaturesRecombine, 1, MPI_INT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(&nDensitiesRecombine, 1, MPI_INT, 0, MPI_COMM_WORLD);
-  MPI_Barrier(MPI_COMM_WORLD);
-#endif
-
-  rateCoeff_Ionization.resize( nCS_Ionize * nTemperaturesIonize * nDensitiesIonize );
-
-  gridTemperature_Ionization.resize( nTemperaturesIonize );
-
-  gridDensity_Ionization.resize( nDensitiesIonize );
-
-  rateCoeff_Recombination.resize( nCS_Recombine * 
-                                  nTemperaturesRecombine * nDensitiesRecombine );
-
-  gridTemperature_Recombination.resize( nTemperaturesRecombine );
-
-  gridDensity_Recombination.resize( nDensitiesRecombine );
-
-  if (world_rank == 0) {
-
-    i2 = read_profiles(
-        input_path + ionizeFile, nTemperaturesIonize, nDensitiesIonize,
-        ionizeTempGrid, gridTemperature_Ionization, ionizeDensGrid,
-        gridDensity_Ionization, ionizeRCvarChar, rateCoeff_Ionization);
-
-    i4 = read_profiles(
-        input_path + recombFile, nTemperaturesRecombine, nDensitiesRecombine,
-        recombTempGrid, gridTemperature_Recombination, recombDensGrid,
-        gridDensity_Recombination, recombRCvarChar, rateCoeff_Recombination);
-  }
-  }
-
-#if USE_MPI > 0
-  MPI_Bcast(&rateCoeff_Ionization[0],
-            nCS_Ionize * nTemperaturesIonize * nDensitiesIonize, MPI_FLOAT, 0,
-            MPI_COMM_WORLD);
-  MPI_Bcast(&gridTemperature_Ionization[0], nTemperaturesIonize, MPI_FLOAT, 0,
-            MPI_COMM_WORLD);
-  MPI_Bcast(&gridDensity_Ionization[0], nDensitiesIonize, MPI_FLOAT, 0,
-            MPI_COMM_WORLD);
-  MPI_Bcast(&rateCoeff_Recombination[0],
-            nCS_Recombine * nTemperaturesRecombine * nDensitiesRecombine,
-            MPI_FLOAT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(&gridTemperature_Recombination[0], nTemperaturesRecombine,
-            MPI_FLOAT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(&gridDensity_Recombination[0], nDensitiesRecombine, MPI_FLOAT, 0,
-            MPI_COMM_WORLD);
-  MPI_Barrier(MPI_COMM_WORLD);
-#endif
 
   // Applying background values at material boundaries
   std::for_each(boundaries.begin(), boundaries.end() - 1,
@@ -3101,7 +2947,6 @@ if( presheath_interp == 1 )
   }
          
   auto particleArray = new Particles(nParticles,1,cfg,gitr_flags);
-
   std::cout << "creating particle source" << std::endl;
   nP = cfg.lookup("impurityParticleSource.nP");
   sim::Array<gitr_precision>  px(nP), py(nP), pz(nP), pvx(nP), pvy(nP), pvz(nP), pamu(nP), pZ(nP), pcharge(nP);
@@ -3109,109 +2954,54 @@ if( presheath_interp == 1 )
   libconfig::Setting& speciesArray = cfg.lookup("impurityParticleSource.initialConditions.species");
   int num_species = speciesArray.getLength();
   printf("Number of species: %d\n",num_species);
-    // Initialize arrays or vectors to store values for all species
   std::vector<gitr_precision> amu(num_species);
   std::vector<gitr_precision> Z(num_species);
   std::vector<gitr_precision> charge(num_species);
   int particlesPerSpecies[num_species];
   int particle_index = 0;
 
-  if (world_rank == 0) {
-    for (int i = 0; i < num_species; i++) {
-          gitr_precision _amu, _Z, _charge;
-          gitr_precision _energy_eV, _phi, _theta;
-          gitr_precision _x_start, _y_start, _z_start;
-          int  _numberParticlesPerSpecies;
-          if (speciesArray[i].lookupValue("impurity_amu", _amu) &&
-              speciesArray[i].lookupValue("impurity_Z", _Z) &&
-              speciesArray[i].lookupValue("charge", _charge) &&
-              speciesArray[i].lookupValue("numberParticles", _numberParticlesPerSpecies) &&
-              speciesArray[i].lookupValue("energy_eV", _energy_eV) &&
-              speciesArray[i].lookupValue("theta", _theta) &&
-              speciesArray[i].lookupValue("x_start", _x_start) &&
-              speciesArray[i].lookupValue("y_start", _y_start) &&
-              speciesArray[i].lookupValue("z_start", _z_start) &&
-              speciesArray[i].lookupValue("phi", _phi) )
-               {
-              // Store the values
-              amu[i] = _amu;
-              Z[i] = _Z;
-              charge[i] = _charge;
-              particlesPerSpecies[i] = _numberParticlesPerSpecies;
-              std::cout << "Species " << (i+1) << " - Impurity amu Z charge: " 
-                        << _amu << " " << _Z << " " << _charge << " particlesPerSpecies"  << " " << _numberParticlesPerSpecies << " "
-                        << " phi theta energy: " << _phi << " " << _theta << " " << _energy_eV << std::endl;
-          } else {
-              std::cout << "ERROR: Could not get initial conditions for species " 
-                        << (i+1) << std::endl;
-          }
 
-          if (particle_source_energy == 0) {
-              for (int j = 0; j < _numberParticlesPerSpecies; j++) {
-                gitr_precision rad_phi = _phi * M_PI / 180.0;
-                gitr_precision rad_theta = _theta * M_PI / 180.0;
+  //  read in particle source or generate source 
+  ParticleData particleData;
 
-                gitr_precision vtotal = std::sqrt(2.0 * _energy_eV * ELECTRON_CHARGE/ _amu / AMU_CONVERSION);
-
-                gitr_precision vx = vtotal * std::sin(rad_phi) * std::cos(rad_theta);
-                gitr_precision vy = vtotal * std::sin(rad_phi) * std::sin(rad_theta);
-                gitr_precision vz = vtotal * std::cos(rad_phi);
-
-                if (rad_phi == 0.0) {
-                    vx = 0.0;
-                    vy = 0.0;
-                    vz = vtotal;
-                }
-
-                // Store these values in the global arrays
-                px[particle_index] = _x_start;
-                py[particle_index] = _y_start;
-                pz[particle_index] = _z_start;
-                pvx[particle_index] = vx;
-                pvy[particle_index] = vy;
-                pvz[particle_index] = vz;
-                pcharge[particle_index] = _charge;
-                pamu[particle_index] = _amu;
-                pZ[particle_index] = _Z;
-
-                particle_index++;  // Move to the next slot for the next particle
-            }
-         }
-    }
+  if (particle_source_file == 1) {
+      std::string ncParticleSourceFile;
+      getVariable(cfg, "particleSource.ncFileString", ncParticleSourceFile);
+      particleData = readParticleData(ncParticleSourceFile);
+  } else if (particle_source_file == 0) {
+      particleData = generateParticleData(cfg, particle_source_energy);
+  } else {
+      std::cerr << "Error: Invalid value for particle_source_file." << std::endl;
   }
+  initializeParticleArray(particleData, particleArray, px, py, pz, pvx, pvy, pvz, pZ, pamu, pcharge, dt);
 
-  for (int i = 0; i < nP; i++) {
-    particleArray->setParticleV(i, px[i], py[i], pz[i], pvx[i], pvy[i], pvz[i], pZ[i], pamu[i], pcharge[i], dt);
-        printf("Particle positions and velocities are %d %g %g %g %g %g %g %g %g %g %g \n", i, px[i], py[i], pz[i], pvx[i], pvy[i], pvz[i], pZ[i], pamu[i], pcharge[i], dt);
-  }
+  std::cout << "writing particles out file" << std::endl;
+  netCDF::NcFile ncFile_particles("output/particleSource.nc", netCDF::NcFile::replace);
+  netCDF::NcDim pNP = ncFile_particles.addDim("nP", nP);
+  netCDF::NcVar p_surfNormx = ncFile_particles.addVar("surfNormX", netcdf_precision, pNP);
+  netCDF::NcVar p_surfNormy = ncFile_particles.addVar("surfNormY", netcdf_precision, pNP);
+  netCDF::NcVar p_surfNormz = ncFile_particles.addVar("surfNormZ", netcdf_precision, pNP);
+  netCDF::NcVar p_vx = ncFile_particles.addVar("vx", netcdf_precision, pNP);
+  netCDF::NcVar p_vy = ncFile_particles.addVar("vy", netcdf_precision, pNP);
+  netCDF::NcVar p_vz = ncFile_particles.addVar("vz", netcdf_precision, pNP);
+  netCDF::NcVar p_x = ncFile_particles.addVar("x", netcdf_precision, pNP);
+  netCDF::NcVar p_y = ncFile_particles.addVar("y", netcdf_precision, pNP);
+  netCDF::NcVar p_z = ncFile_particles.addVar("z", netcdf_precision, pNP);
+  netCDF::NcVar p_charge = ncFile_particles.addVar("charge", netcdf_precision, pNP);
+  netCDF::NcVar p_amu = ncFile_particles.addVar("amu", netcdf_precision, pNP);
+  netCDF::NcVar p_Z = ncFile_particles.addVar("Z", netcdf_precision, pNP);
+  p_vx.putVar(&pvx[0]);
+  p_vy.putVar(&pvy[0]);
+  p_vz.putVar(&pvz[0]);
+  p_x.putVar(&px[0]);
+  p_y.putVar(&py[0]);
+  p_z.putVar(&pz[0]);
+  p_charge.putVar(&pcharge[0]);
+  p_amu.putVar(&pamu[0]);
+  p_Z.putVar(&pZ[0]);
+  ncFile_particles.close();
 
-    std::cout << "writing particles out file" << std::endl;
-    netCDF::NcFile ncFile_particles("output/particleSource.nc", netCDF::NcFile::replace);
-    netCDF::NcDim pNP = ncFile_particles.addDim("nP", nP);
-    netCDF::NcVar p_surfNormx = ncFile_particles.addVar("surfNormX", netcdf_precision, pNP);
-    netCDF::NcVar p_surfNormy = ncFile_particles.addVar("surfNormY", netcdf_precision, pNP);
-    netCDF::NcVar p_surfNormz = ncFile_particles.addVar("surfNormZ", netcdf_precision, pNP);
-    netCDF::NcVar p_vx = ncFile_particles.addVar("vx", netcdf_precision, pNP);
-    netCDF::NcVar p_vy = ncFile_particles.addVar("vy", netcdf_precision, pNP);
-    netCDF::NcVar p_vz = ncFile_particles.addVar("vz", netcdf_precision, pNP);
-    netCDF::NcVar p_x = ncFile_particles.addVar("x", netcdf_precision, pNP);
-    netCDF::NcVar p_y = ncFile_particles.addVar("y", netcdf_precision, pNP);
-    netCDF::NcVar p_z = ncFile_particles.addVar("z", netcdf_precision, pNP);
-    netCDF::NcVar p_charge = ncFile_particles.addVar("charge", netcdf_precision, pNP);
-    netCDF::NcVar p_amu = ncFile_particles.addVar("amu", netcdf_precision, pNP);
-    netCDF::NcVar p_Z = ncFile_particles.addVar("Z", netcdf_precision, pNP);
-    p_vx.putVar(&pvx[0]);
-    p_vy.putVar(&pvy[0]);
-    p_vz.putVar(&pvz[0]);
-    p_x.putVar(&px[0]);
-    p_y.putVar(&py[0]);
-    p_z.putVar(&pz[0]);
-    p_charge.putVar(&pcharge[0]);
-    p_amu.putVar(&pamu[0]);
-    p_Z.putVar(&pZ[0]);
-    ncFile_particles.close();
-    std::cout << "finished writing particles out file" << std::endl;
-
+  std::cout << "finished writing particles out file" << std::endl;
   int subSampleFac = 1;
   if (world_rank == 0) {
     if (cfg.lookupValue("diagnostics.trackSubSampleFactor", subSampleFac)) {
@@ -3250,12 +3040,10 @@ if( presheath_interp == 1 )
 
   if( particle_tracks > 0 )
   {
-
-  for (int i = 0; i < world_size; i++) {
-    pDisplacement[i] = pStartIndx[i] * nHistoriesPerParticle;
-    pHistPerNode[i] = nPPerRank[i] * nHistoriesPerParticle;
-  }
-
+    for (int i = 0; i < world_size; i++) {
+      pDisplacement[i] = pStartIndx[i] * nHistoriesPerParticle;
+      pHistPerNode[i] = nPPerRank[i] * nHistoriesPerParticle;
+    }
   const int *displ = &pDisplacement[0];
   const int *phpn = &pHistPerNode[0];
   std::cout << "History array length " << nHistories << std::endl;
@@ -3272,11 +3060,8 @@ if( presheath_interp == 1 )
 
   std::cout << "Beginning random number seeds" << std::endl;
   std::uniform_real_distribution<gitr_precision> dist(0, 1e6);
-
-
   thrust::counting_iterator<std::size_t> particleBegin(pStartIndx[world_rank]);
-  thrust::counting_iterator<std::size_t> particleEnd(
-      pStartIndx[world_rank] + nActiveParticlesOnRank[world_rank] );
+  thrust::counting_iterator<std::size_t> particleEnd(pStartIndx[world_rank] + nActiveParticlesOnRank[world_rank] );
   thrust::counting_iterator<std::size_t> particleOne(1);
   thrust::counting_iterator<std::size_t> particleZero(0);
   auto randInitStart_clock = gitr_time::now();
@@ -3348,7 +3133,6 @@ if( presheath_interp == 1 )
       use_3d_geom,
       cylsymm,
       max_dt);
-
 
   geometry_check geometry_check0(
       particleArray, nLines, &boundaries[0], surfaces, dt, nHashes,
@@ -3435,150 +3219,7 @@ if( presheath_interp == 1 )
                    &weightHistory.front());
 
 
-//// AD: FIXME ////
-
-//   if( force_eval > 0 )
-//   {
-//   if (world_rank == 0) {
-//     int nR_force, nZ_force;
-//     gitr_precision forceX0, forceX1, forceZ0, forceZ1, testEnergy;
-//     std::string forceCfg = "forceEvaluation.";
-
-//     getVariable(cfg, forceCfg + "nR", nR_force);
-//     getVariable(cfg, forceCfg + "nZ", nZ_force);
-//     std::vector<gitr_precision> forceR(nR_force, 0.0), forceZ(nZ_force, 0.0);
-//     std::vector<gitr_precision> tIon(nR_force * nZ_force, 0.0),
-//         tRecomb(nR_force * nZ_force, 0.0);
-//     std::vector<gitr_precision> dvEr(nR_force * nZ_force, 0.0),
-//         dvEz(nR_force * nZ_force, 0.0), dvEt(nR_force * nZ_force, 0.0);
-//     std::vector<gitr_precision> dvBr(nR_force * nZ_force, 0.0),
-//         dvBz(nR_force * nZ_force, 0.0), dvBt(nR_force * nZ_force, 0.0);
-//     std::vector<gitr_precision> dvCollr(nR_force * nZ_force, 0.0),
-//         dvCollz(nR_force * nZ_force, 0.0), dvCollt(nR_force * nZ_force, 0.0);
-//     std::vector<gitr_precision> dvITGr(nR_force * nZ_force, 0.0),
-//         dvITGz(nR_force * nZ_force, 0.0), dvITGt(nR_force * nZ_force, 0.0);
-//     std::vector<gitr_precision> dvETGr(nR_force * nZ_force, 0.0),
-//         dvETGz(nR_force * nZ_force, 0.0), dvETGt(nR_force * nZ_force, 0.0);
-//     getVariable(cfg, forceCfg + "X0", forceX0);
-//     getVariable(cfg, forceCfg + "X1", forceX1);
-//     getVariable(cfg, forceCfg + "Z0", forceZ0);
-//     getVariable(cfg, forceCfg + "Z1", forceZ1);
-//     getVariable(cfg, forceCfg + "particleEnergy", testEnergy);
-//     for (int i = 0; i < nR_force; i++) {
-//       forceR[i] = forceX0 + (forceX1 - forceX0) * i / (nR_force - 1);
-//     }
-//     for (int i = 0; i < nZ_force; i++) {
-//       forceZ[i] = forceZ0 + (forceZ1 - forceZ0) * i / (nZ_force - 1);
-//     }
-//     gitr_precision Btotal = 0.0;
-//     for (int i = 0; i < nR_force; i++) {
-//       for (int j = 0; j < nZ_force; j++) {
-//         interp2dVector(&Btest[0], forceR[i], 0.0, forceZ[j], nR_Bfield,
-//                        nZ_Bfield, bfieldGridr.data(), bfieldGridz.data(),
-//                        br.data(), bz.data(), by.data(), cylsymm );
-//         Btotal = vectorNorm(Btest);
-//         gitr_precision testTi =
-//             interp2dCombined(0.0, 0.1, 0.0, nR_Temp, nZ_Temp, TempGridr.data(),
-//                              TempGridz.data(), ti.data(), cylsymm );
-//         particleArray->setParticle(0, forceR[i], 0.0, forceZ[j], testTi, 0.0,
-//                                    0.0, Z, amu, charge + 1.0);
-//         move_boris0(0);
-
-//         if( ionization > 0 )
-//         {
-//           thrust::for_each(thrust::device,particleBegin,particleBegin,ionize0);
-// 	        thrust::for_each(thrust::device,particleBegin,particleBegin,recombine0);
-//         }
-
-//         if( coulomb_collisions > 0 )
-//         {
-//         thrust::for_each(thrust::device,particleBegin,particleBegin,coulombCollisions0);
-//         }
-
-//         if( thermal_force > 0 )
-//         {
-//         thrust::for_each(thrust::device,particleBegin,particleBegin,thermalForce0);
-//         }
-//         dvEr[j * nR_force + i] = move_boris0.electricForce[0];
-//         dvEz[j * nR_force + i] = move_boris0.electricForce[2];
-//         dvEt[j * nR_force + i] = move_boris0.electricForce[1];
-//         dvBr[j * nR_force + i] = move_boris0.magneticForce[0];
-//         dvBz[j * nR_force + i] = move_boris0.magneticForce[2];
-//         dvBt[j * nR_force + i] = move_boris0.magneticForce[1];
-
-//         if( ionization > 0 )
-//         {
-//           tIon[j * nR_force + i] = ionize0.tion;
-//           tRecomb[j * nR_force + i] = recombine0.tion;
-//         }
-
-//         if( coulomb_collisions > 0 )
-//         {
-//         dvCollr[j * nR_force + i] = coulombCollisions0.dv[0];
-//         dvCollz[j * nR_force + i] = coulombCollisions0.dv[2];
-//         dvCollt[j * nR_force + i] = coulombCollisions0.dv[1];
-//         }
-//         if( thermal_force > 0 )
-//         {
-//         dvITGr[j * nR_force + i] = thermalForce0.dv_ITGx;
-//         dvITGz[j * nR_force + i] = thermalForce0.dv_ITGz;
-//         dvITGt[j * nR_force + i] = thermalForce0.dv_ITGy;
-//         dvETGr[j * nR_force + i] = thermalForce0.dv_ETGx;
-//         dvETGz[j * nR_force + i] = thermalForce0.dv_ETGz;
-//         dvETGt[j * nR_force + i] = thermalForce0.dv_ETGy;
-//         }
-//       }
-//     }
-//     std::cout << " about to write ncFile_forces " << std::endl;
-//     netCDF::NcFile ncFile_force("output/forces.nc", netCDF::NcFile::replace);
-//     netCDF::NcDim nc_nRf = ncFile_force.addDim("nR", nR_force);
-//     netCDF::NcDim nc_nZf = ncFile_force.addDim("nZ", nZ_force);
-//     vector<netCDF::NcDim> forceDims;
-//     forceDims.push_back(nc_nZf);
-//     forceDims.push_back(nc_nRf);
-//     netCDF::NcVar forceRf = ncFile_force.addVar("r", netcdf_precision, nc_nRf);
-//     netCDF::NcVar forceZf = ncFile_force.addVar("z", netcdf_precision, nc_nZf);
-//     netCDF::NcVar nction = ncFile_force.addVar("tIon", netcdf_precision, forceDims);
-//     netCDF::NcVar nctrec = ncFile_force.addVar("tRec", netcdf_precision, forceDims);
-//     netCDF::NcVar dvErf = ncFile_force.addVar("dvEr", netcdf_precision, forceDims);
-//     netCDF::NcVar dvEzf = ncFile_force.addVar("dvEz", netcdf_precision, forceDims);
-//     netCDF::NcVar dvEtf = ncFile_force.addVar("dvEt", netcdf_precision, forceDims);
-//     netCDF::NcVar dvBrf = ncFile_force.addVar("dvBr", netcdf_precision, forceDims);
-//     netCDF::NcVar dvBzf = ncFile_force.addVar("dvBz", netcdf_precision, forceDims);
-//     netCDF::NcVar dvBtf = ncFile_force.addVar("dvBt", netcdf_precision, forceDims);
-//     netCDF::NcVar dvCollrf = ncFile_force.addVar("dvCollr", netcdf_precision, forceDims);
-//     netCDF::NcVar dvCollzf = ncFile_force.addVar("dvCollz", netcdf_precision, forceDims);
-//     netCDF::NcVar dvColltf = ncFile_force.addVar("dvCollt", netcdf_precision, forceDims);
-//     netCDF::NcVar dvITGrf = ncFile_force.addVar("dvITGr", netcdf_precision, forceDims);
-//     netCDF::NcVar dvITGzf = ncFile_force.addVar("dvITGz", netcdf_precision, forceDims);
-//     netCDF::NcVar dvITGtf = ncFile_force.addVar("dvITGt", netcdf_precision, forceDims);
-//     netCDF::NcVar dvETGrf = ncFile_force.addVar("dvETGr", netcdf_precision, forceDims);
-//     netCDF::NcVar dvETGzf = ncFile_force.addVar("dvETGz", netcdf_precision, forceDims);
-//     netCDF::NcVar dvETGtf = ncFile_force.addVar("dvETGt", netcdf_precision, forceDims);
-//     forceRf.putVar(&forceR[0]);
-//     forceZf.putVar(&forceZ[0]);
-//     nction.putVar(&tIon[0]);
-//     nctrec.putVar(&tRecomb[0]);
-//     dvErf.putVar(&dvEr[0]);
-//     dvEzf.putVar(&dvEz[0]);
-//     dvEtf.putVar(&dvEt[0]);
-//     dvBrf.putVar(&dvBr[0]);
-//     dvBzf.putVar(&dvBz[0]);
-//     dvBtf.putVar(&dvBt[0]);
-//     dvCollrf.putVar(&dvCollr[0]);
-//     dvCollzf.putVar(&dvCollz[0]);
-//     dvColltf.putVar(&dvCollt[0]);
-//     dvITGrf.putVar(&dvITGr[0]);
-//     dvITGzf.putVar(&dvITGz[0]);
-//     dvITGtf.putVar(&dvITGt[0]);
-//     dvETGrf.putVar(&dvETGr[0]);
-//     dvETGzf.putVar(&dvETGz[0]);
-//     dvETGtf.putVar(&dvETGt[0]);
-//     ncFile_force.close();
-//     // particleArray->setParticleV(0, px[0], py[0], pz[0], pvx[0], pvy[0], pvz[0],
-//     //                             Z, amu, charge, dt);
-//   }
-// }
+//// AD: FIXME  add force_eval later ////
 
   auto start_clock = gitr_time::now();
   std::chrono::duration<gitr_precision> fs1 = start_clock - gitr_start_clock;
