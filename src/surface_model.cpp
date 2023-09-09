@@ -324,7 +324,6 @@ void reflection::operator()(std::size_t indx) const {
     #else
         surfaces->sumWeightStrike[surfaceHit] =surfaces->sumWeightStrike[surfaceHit] +weight;
         surfaces->sumParticlesStrike[surfaceHit] = surfaces->sumParticlesStrike[surfaceHit]+1;
-      //boundaryVector[wallHit].impacts = boundaryVector[wallHit].impacts +  particles->weight[indx];
     #endif
     if( flux_ea > 0 )
     {
