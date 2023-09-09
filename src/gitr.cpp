@@ -165,9 +165,6 @@ int main(int argc, char **argv, char **envp) {
   MPI_Init(&argc, &argv);
 #endif
  
-  // read comand line arguments for specifying number of ppn (or gpus per node)
-  // and specify input file if different than default
-  // -nGPUPerNode and -i respectively
   read_comand_line_args(argc,argv,ppn,inputFile);
 
 #if USE_MPI > 0
@@ -208,8 +205,6 @@ int main(int argc, char **argv, char **envp) {
     std::cout << "Open configuration file " << input_path << inputFile
               << std::endl;
     importLibConfig(cfg, inputFile);
-    //checkFlags( cfg );
-
     // Parse and read geometry file
     std::string geomFile;
     getVariable(cfg, "geometry.fileString", geomFile);
@@ -1436,19 +1431,6 @@ if( GENERATE_LC > 0 )
             Lc[addIndex] = Lc[addIndex] + lcBuffer;
           } else
             Lc[addIndex] = 1.0e4;
-          //       if(forwardTracerParticles->distanceTraveled[addIndex] >
-          //               backwardTracerParticles->distanceTraveled[addIndex])
-          // if(forwardTracerParticles->distanceTraveled[addIndex] >
-          //        0.5*Lc[addIndex])
-          //{
-          //  s[addIndex] =
-          //  -(0.5*Lc[addIndex]-backwardTracerParticles->distanceTraveled[addIndex]);
-          //}
-          // else
-          //{
-          //  s[addIndex] =
-          //  (0.5*Lc[addIndex]-forwardTracerParticles->distanceTraveled[addIndex]);
-          //}
           if (forwardTracerParticles->hitWall[addIndex] > 0 &&
               backwardTracerParticles->hitWall[addIndex] > 0) {
             s[addIndex] =
@@ -2854,11 +2836,6 @@ if( presheath_interp == 1 )
   libconfig::Setting& speciesArray = cfg.lookup("impurityParticleSource.initialConditions.species");
   int num_species = speciesArray.getLength();
   printf("Number of species: %d\n",num_species);
-  std::vector<gitr_precision> amu(num_species);
-  std::vector<gitr_precision> Z(num_species);
-  std::vector<gitr_precision> charge(num_species);
-  int particlesPerSpecies[num_species];
-  int particle_index = 0;
 
   //  read in particle source or generate source 
   ParticleData particleData;

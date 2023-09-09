@@ -174,10 +174,9 @@ ParticleData generateParticleData(const libconfig::Config &cfg, int particle_sou
                         std::cout << "Warning: Non-zero particle_source_energy is not currently supported." << std::endl;
         }
     }
+    std::cout << "size of data: " << data.xpfile.size() << std::endl;
     return data;
 }
-
-
 
  void initializeParticleArray(const ParticleData& particleData, Particles* particleArray,
     sim::Array<gitr_precision>& px, sim::Array<gitr_precision>& py, sim::Array<gitr_precision>& pz,
@@ -196,9 +195,7 @@ ParticleData generateParticleData(const libconfig::Config &cfg, int particle_sou
     auto& mass = particleData.amu;
     auto& ionizationState = particleData.Z;
 
-    int nP = particleData.Z.size();
-    long nParticles = nP;
-
+    long nParticles = particleData.Z.size();
 
     for (size_t i = 0; i < nParticles; ++i) {
         // Set particle data
