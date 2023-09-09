@@ -88,7 +88,7 @@ gitr_precision getE ( gitr_precision x0, gitr_precision y, gitr_precision z, git
        int nR_closeGeom, int nY_closeGeom,int nZ_closeGeom, int n_closeGeomElements, 
        gitr_precision *closeGeomGridr,gitr_precision *closeGeomGridy, gitr_precision *closeGeomGridz, int *closeGeom, 
          int&  closestBoundaryIndex, int biased_surface, int use_3d_geom, 
-         int geom_hash_sheath, int cylsymm  ) 
+         int geom_hash_sheath, int cylsymm , int sheath_model_type ) 
     {
 
     gitr_precision pot = 0.0;
@@ -553,8 +553,8 @@ gitr_precision getE ( gitr_precision x0, gitr_precision y, gitr_precision z, git
     gitr_precision larmorRadius = boundaryVector[minIndex].larmorRadius;
 
     // get the magnitude of the sheath electric field
-    // todo: add SheathModel into flags and input deck: COULETTE_MANFREDI, Stangeby, etc.
-    Emag = sheathModel(SheathModel::COULETTE_MANFREDI, minDistance, boundaryVector, minIndex);
+    Emag = sheathModel(sheath_model_type, minDistance, boundaryVector, minIndex);
+
 
     }
         /* Captain! This appears to be skipped? */
@@ -631,7 +631,8 @@ move_boris::move_boris(
   int geom_hash_sheath_,
   int use_3d_geom_,
   int cylsymm_,
-  gitr_precision _max_dt)
+  gitr_precision _max_dt,
+  int sheath_model_type_)
 
   : 
   particlesPointer(_particlesPointer),
@@ -671,7 +672,8 @@ move_boris::move_boris(
         biased_surface( biased_surface_ ),
         geom_hash_sheath( geom_hash_sheath_ ),
         use_3d_geom( use_3d_geom_ ),
-        cylsymm( cylsymm_ )
+        cylsymm( cylsymm_ ),
+        sheath_model_type( sheath_model_type_ )
         {}
 
 CUDA_CALLABLE_MEMBER    
@@ -720,7 +722,7 @@ void move_boris::operator()(std::size_t indx)
                   n_closeGeomElements_sheath,closeGeomGridr_sheath,
                   closeGeomGridy_sheath,
                   closeGeomGridz_sheath,closeGeom_sheath, closestBoundaryIndex,
-                  biased_surface, use_3d_geom, geom_hash_sheath, cylsymm  );
+                  biased_surface, use_3d_geom, geom_hash_sheath, cylsymm, sheath_model_type  );
   }
 
   if( presheath_efield > 0 )
@@ -740,8 +742,6 @@ void move_boris::operator()(std::size_t indx)
   gyrofrequency = particlesPointer->charge[indx]*1.60217662e-19*Bmag/(particlesPointer->amu[indx]*1.6737236e-27);
 
   // print B field and E field
-  printf(" B field %g %g %g \n", B[0], B[1], B[2]);
-    printf(" E field %g %g %g \n", E[0], E[1], E[2]);
   //q_prime = 9.572528104401468e7*particlesPointer->charge[indx] / particlesPointer->amu[indx] * dt * 0.5;
   /* Captain! original code above, new code below. q_prime = q * dt / ( 2 * m ) */
   q_prime = particlesPointer->charge[ indx ] * gitr_constants::electron_volt * dt * 0.5 /
@@ -835,7 +835,7 @@ void move_boris::operator()(std::size_t indx)
                   n_closeGeomElements_sheath,closeGeomGridr_sheath,
                   closeGeomGridy_sheath,
                   closeGeomGridz_sheath,closeGeom_sheath, closestBoundaryIndex,
-                  biased_surface, use_3d_geom, geom_hash_sheath, cylsymm  );
+                  biased_surface, use_3d_geom, geom_hash_sheath, cylsymm, sheath_model_type  );
   }
 
   if( presheath_efield > 0 )
@@ -989,7 +989,7 @@ for ( int s=0; s<nSteps; s++ )
 #endif
     if( sheath_efield > 0 )
     {
-    minDist = getE(r[0],r[1],r[2],E,boundaryVector,nLines);
+    minDist = getE(r[0],r[1],r[2],E,boundaryVector,nLines, sheath_model_type);
     }
 
     if( presheath_efield > 0 )
@@ -1048,7 +1048,7 @@ for ( int s=0; s<nSteps; s++ )
 
 if( sheath_efield > 0 )
 {
-    minDist = getE(r2[0],r2[1],r2[2],E,boundaryVector,nLines);
+    minDist = getE(r2[0],r2[1],r2[2],E,boundaryVector,nLines, sheath_model_type);
 }
 if( presheath_efield > 0 )
 {
@@ -1106,7 +1106,7 @@ if( presheath_efield > 0 )
 
 if( sheath_efield > 0 )
 {
-    minDist = getE(r3[0],r3[1],r3[2],E,boundaryVector,nLines);
+    minDist = getE(r3[0],r3[1],r3[2],E,boundaryVector,nLines, sheath_model_type);
 }
 
 if( presheath_efield > 0 )
@@ -1163,7 +1163,7 @@ if( presheath_efield > 0 )
 
   if( sheath_efield > 0 )
   {
-	minDist = getE(r4[0],r4[1],r4[2],E,boundaryVector,nLines);
+	minDist = getE(r4[0],r4[1],r4[2],E,boundaryVector,nLines, sheath_model_type);
   }
   if( presheath_efield > 0 )
   {

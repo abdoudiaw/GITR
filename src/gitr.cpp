@@ -131,6 +131,10 @@ int main(int argc, char **argv, char **envp) {
   int field_aligned_values = FIELD_ALIGNED_VALUES;
   bool fixed_seeds = bool( use.get< int >( use::fixed_seeds ) );
 
+  // get sheath model type
+  int sheath_model_type = use.get< int >( use::sheath_model_type );
+
+
   // Set default processes per node to 1
   int ppn = 1;
 
@@ -2355,7 +2359,7 @@ if( presheath_interp == 1 )
                 n_closeGeomElements_sheath, &closeGeomGridr_sheath.front(),
                 &closeGeomGridy_sheath.front(), &closeGeomGridz_sheath.front(),
                 &closeGeom_sheath.front(), minInd_bnd, biased_surface,
-                use_3d_geom, geom_hash_sheath, cylsymm );
+                use_3d_geom, geom_hash_sheath, cylsymm, sheath_model_type);
     }
 
     if( efield_interp == 2 )
@@ -3040,7 +3044,7 @@ if( presheath_interp == 1 )
       geom_hash_sheath,
       use_3d_geom,
       cylsymm,
-      max_dt);
+      max_dt, sheath_model_type);
 
   geometry_check geometry_check0(
       particleArray, nLines, &boundaries[0], surfaces, dt, nHashes,
@@ -3565,7 +3569,7 @@ std::cout << "bound 255 " << boundaries[255].impacts << std::endl;
                n_closeGeomElements_sheath, &closeGeomGridr_sheath.front(),
                &closeGeomGridy_sheath.front(), &closeGeomGridz_sheath.front(),
                &closeGeom_sheath.front(), closestBoundaryIndex, biased_surface,
-               use_3d_geom, geom_hash_sheath, cylsymm );
+               use_3d_geom, geom_hash_sheath, cylsymm, sheath_model_type);
       
       if (boundaries[closestBoundaryIndex].Z > 0.0) {
         surfIndex = boundaries[closestBoundaryIndex].surfaceNumber;
