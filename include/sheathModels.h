@@ -1,10 +1,16 @@
 //------------------------------------------------------------------------------
 // GITR: sheathModels.h
-// Contributors: GITR Community
-// Last Modified: August 2023 by Diaw
+//------------------------------------------------------------------------------
+//
+// Contributors:
+//     - GITR Community
+//
+// Last Modified:
+//     - August 2023 by Diaw
+//
 // Description:
 //     This header file defines the models for sheath electric fields.
-//     
+//
 // Models Included:
 //     1. Stangeby Model:
 //        - Reference: 
@@ -12,8 +18,6 @@
 //              between the magnetic field and the surface of divertor targets 
 //              and limiters", Nucl. Fusion 52 083012 (2012).
 //              [DOI: 10.1088/0029-5515/52/8/083012]
-//            - D. Stangeby "The Plasma Boundary of Magnetic Fusion Devices", 
-//              IOP Publishing Ltd, 2000.
 //              
 //     2. Coulette-Manfredi Model:
 //        - Reference:
@@ -24,7 +28,9 @@
 //
 // Note:
 //     This file is a component of the GITR codebase.
+//
 //------------------------------------------------------------------------------
+
 
 #include <vector>
 #include <cmath>

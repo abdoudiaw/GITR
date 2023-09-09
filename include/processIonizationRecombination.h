@@ -1,3 +1,25 @@
+//------------------------------------------------------------------------------
+// GITR: processIonizationRecombination.h
+//------------------------------------------------------------------------------
+//
+// Contributors:
+//     - GITR Community
+//
+// Last Modified:
+//     - August 2023 by Diaw
+//
+// Description:
+//     Processes ADAS data for ionization and recombination. Requires an ADAS
+//     file for each material with a nuclear charge Z. The file should be named
+//     in the format: ADAS_Rates_Z.nc and be located in the input/adasData 
+//     directory.
+// FIXME: we eventually wants to move all this data into a single file.
+// Note:
+//     This file is a component of the GITR codebase.
+//
+//------------------------------------------------------------------------------
+
+
 #include <netcdf>
 
 enum ElementaryProcess
@@ -22,7 +44,6 @@ inline std::tuple<size_t, size_t, size_t, std::vector<double>, std::vector<doubl
     }
     std::string input_path = "input/adasData/";
     std::string ratesFiles = "ADAS_Rates_" + std::to_string(charge) + ".nc";
-
 
     // Open the netCDF file
     netCDF::NcFile data(input_path + ratesFiles, netCDF::NcFile::read);

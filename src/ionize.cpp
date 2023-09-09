@@ -1,3 +1,23 @@
+//------------------------------------------------------------------------------
+// GITR: ionize.cpp
+//------------------------------------------------------------------------------
+//
+// Contributors:
+//     - GITR Community
+//
+// Last Modified:
+//     - August 2023 by Diaw
+//
+// Description:
+//     Compute rates and performs ioniziation. 
+//
+// Note:
+//     This file is a component of the GITR codebase.
+//
+//------------------------------------------------------------------------------
+
+
+
 #include "ionize.h"
 #include "interpRateCoeff.hpp"
 #include "processIonizationRecombination.h"
@@ -114,13 +134,10 @@ void ionize< T >::operator()(std::size_t indx)
       dt = particlesPointer->dt[indx];
     }
 
-        // Get local temperature and density
-        gitr_precision tlocal = interp2dCombined(particlesPointer->x[indx], particlesPointer->y[indx], particlesPointer->z[indx],
-                                                 nR_Temp, nZ_Temp, TempGridr, TempGridz, te);
-        gitr_precision nlocal = interp2dCombined(particlesPointer->x[indx], particlesPointer->y[indx], particlesPointer->z[indx],
-            nR_Dens, nZ_Dens, DensGridr, DensGridz, ne);
-
-            gitr_precision RClocal = rateCoeffInterp(particlesPointer->charge[indx], tlocal, nlocal, nTemperaturesIonize, nDensitiesIonize, gridTemperature_Ionization, gridDensity_Ionization, rateCoeff_Ionization);
+    // Get local temperature and density
+    gitr_precision tlocal = interp2dCombined(particlesPointer->x[indx], particlesPointer->y[indx], particlesPointer->z[indx], nR_Temp, nZ_Temp, TempGridr, TempGridz, te);
+    gitr_precision nlocal = interp2dCombined(particlesPointer->x[indx], particlesPointer->y[indx], particlesPointer->z[indx], nR_Dens, nZ_Dens, DensGridr, DensGridz, ne);
+    gitr_precision RClocal = rateCoeffInterp(particlesPointer->charge[indx], tlocal, nlocal, nTemperaturesIonize, nDensitiesIonize, gridTemperature_Ionization, gridDensity_Ionization, rateCoeff_Ionization);
 
     tion = 1.0 / (RClocal * nlocal);
     gitr_precision P = exp(-dt / tion);

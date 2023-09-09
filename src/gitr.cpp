@@ -1,3 +1,25 @@
+//------------------------------------------------------------------------------
+// GITR: gitr.cpp
+//------------------------------------------------------------------------------
+//
+// Contributors:
+//     - GITR Community
+//
+// Last Modified:
+//     - August 2023 by Diaw
+//     - Mass and charge are arrays now
+//     - Remove unused code blocks
+//     - Add new sheath model and according flags
+//     - Particle source generation and reading are now in separate files: getParticleData.h
+//     - Ionization and recombination reading and processing are now in separate files: processIonizationRecombination.h
+//
+// Note:
+//     This file is a component of the GITR codebase.
+//
+//------------------------------------------------------------------------------
+
+
+
 #include "Boundary.h"
 //#include "Fields.h"
 #include "Particles.h"
@@ -14,15 +36,12 @@
 #include "hashGeomSheath.h"
 #include "history.h"
 #include "interp2d.hpp"
-//#include "interpRateCoeff.hpp"
 #include "interpolate.h"
 #include "ionize.h"
 #include <cmath>
-//#include "ncFile.h"
 #include "recombine.h"
 #include "spectroscopy.h"
 #include "surfaceModel.h"
-//#include "testRoutineCuda.h"
 #include "thermalForce.h"
 #include "utils.h"
 #include <algorithm>
@@ -203,38 +222,6 @@ int main(int argc, char **argv, char **envp) {
   }
   auto gitr_flags = new Flags(cfg);
     std::cout << "gitr flags " << gitr_flags->USE_IONIZATION << std::endl;
-    //auto field1 = new Field(cfg,"backgroundPlasmaProfiles.Bfield");
-    //FIXME: work on new field struct
-    //auto field1 = new Field();
-    //auto pClient = new Field_client(); 
-    //std::cout << "created client " << std::endl;
-    //std::cout << "interp " << (field1->*(field1->fooHandler))(1.0,2.0,3.0) << std::endl;
-    //Field * pField = pClient->getField(); 
-    //std::cout << "created field pointer " << std::endl;
-    //std::cout << "interp2 " << field1->interpolate(1.0,2.0,3.0) << std::endl;
-    ////float interpvalfield  = pField->interpolate();
-    //std::cout << "called interpolate " << std::endl;
-
-// show memory usage of GPU
-
-//#if __CUDACC__
-//  namespace fsn = std::experimental::filesystem;
-//#else
-//  namespace fsn = std::experimental::filesystem;
-//#endif
-//
-//print_gpu_memory_usage(world_rank);
-//
-//  fsn::path output_folder = "output";
-//  // Output
-//
-//  //boost::filesystem::path dir(output_folder);
-//  if (!(fsn::exists(output_folder))) {
-//    std::cout << "Doesn't Exist in main" << std::endl;
-//    if (fsn::create_directory(output_folder)) {
-//      std::cout << " Successfully Created " << std::endl;
-//    }
-//  }
 
   // Background species info
   gitr_precision background_Z = 0.0, background_amu = 0.0;

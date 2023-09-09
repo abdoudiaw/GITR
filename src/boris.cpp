@@ -1,3 +1,26 @@
+//------------------------------------------------------------------------------
+// GITR: boris.cpp
+//------------------------------------------------------------------------------
+//
+// Contributors:
+//     - GITR Community
+//
+// Last Modified:
+//     - August 2023 by Diaw
+//     - Add sheathModelType flag to control which sheath model is used
+//
+// Description:
+//     Updates particle position and velocity using the Boris pusher.
+//
+//
+// Note:
+//     This file is a component of the GITR codebase.
+//
+//------------------------------------------------------------------------------
+
+
+
+
 #include "boris.h"
 #include "constants.h"
 #include "sheathModels.h"
