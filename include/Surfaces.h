@@ -73,10 +73,8 @@ public:
 
   CUDA_CALLABLE_MEMBER
   Surfaces(std::size_t nS,
-  //  const std::string& materialName, 
   std::size_t nE, std::size_t nA) :
    sumParticlesStrike{nS,0}, gridE{nE,0.0}, gridA{nA,0.0},
-  //  , materialName{materialName},
    sumWeightStrike{nS,0.0}, grossDeposition{nS,0.0},
     grossErosion{nS,0.0}, aveSputtYld{nS,0.0}, sputtYldCount{nS,0},
    energyDistribution{nS*nE*nA,0.0},sputtDistribution{nS*nE*nA,0.0},

@@ -10,8 +10,8 @@
 #else
                             std::mt19937 *_state,
 #endif
-            int _nLines,Boundary * _boundaryVector,
-            Surfaces * _surfaces,
+    int _nLines,Boundary * _boundaryVector,
+    Surfaces * _surfaces,
     int flux_ea_,
     int use_3d_geom_,
     int cylsymm_ ) :
@@ -96,11 +96,11 @@ void reflection::operator()(std::size_t indx) const {
     E0_for_surface_model = 0.5 * particles->amu[indx] * 1.6737236e-27 * (norm_part * norm_part) / 1.60217662e-19;
     E0_for_flux_binning = E0_for_surface_model;
     gitr_precision maxE_for_surface_model = std::pow(10.0,Elog_sputtRefCoeff[nE_sputtRefCoeff-1]);
-     if (E0_for_surface_model > maxE_for_surface_model)
-         E0_for_surface_model = maxE_for_surface_model;
+    if (E0_for_surface_model > maxE_for_surface_model)
+        E0_for_surface_model = maxE_for_surface_model;
      
-     if (E0_for_flux_binning > Edist)
-         E0_for_flux_binning = Edist;
+    if (E0_for_flux_binning > Edist)
+        E0_for_flux_binning = Edist;
       
     wallIndex = particles->wallIndex[indx];
     boundaryVector[wallHit].getSurfaceNormal(surfaceNormalVector, particles->y[indx], particles->x[indx], use_3d_geom, cylsymm );
@@ -192,10 +192,9 @@ void reflection::operator()(std::size_t indx) const {
                 atomicAdd1(&surfaces->grossErosion[surfaceHit],weight*Y0);
         #else
                 #pragma omp atomic
-                //surfaces->grossDeposition[surfaceHit] = surfaces->grossDeposition[surfaceHit]+weight*(1.0-R0);
+                printf("Charge of the particle hitting surface %d is %g\n", surfaceHit, particles->Z[indx]);
                 surfaces->grossDeposition[surfaceHit] += ( weight*(1.0-R0) );
                 #pragma omp atomic
-                //surfaces->grossErosion[surfaceHit] = surfaces->grossErosion[surfaceHit]+weight*Y0;
                 surfaces->grossErosion[surfaceHit] += ( weight * Y0 );
         #endif
         }
@@ -203,7 +202,6 @@ void reflection::operator()(std::size_t indx) const {
 
       else //sputters
       {
-        // gitr_precision* _ADist_CDF_Y_regrid ; 
         aInterpVal = interp3d(r8,thetaImpact,std::log10(E0_for_surface_model),
                 nA_sputtRefDistOut,nA_sputtRefDistIn,nE_sputtRefDistIn,
                 angleDistGrid01.data(),A_sputtRefDistIn.data(),
@@ -215,7 +213,6 @@ void reflection::operator()(std::size_t indx) const {
         newWeight=weight*totalYR;
 
          // Sputtering new particles 
-        //  get wall material : boundaryVector[wallHit].Z
             printf("Sputtering!");
             gitr_precision mass = materialData[boundaryVector[wallHit].Z].mass; 
             gitr_precision Eb = materialData[boundaryVector[wallHit].Z].surfaceBindingEnergy; 
@@ -339,23 +336,18 @@ void reflection::operator()(std::size_t indx) const {
     }
       }
       //reflect with weight and new initial conditions
-      
     if (boundaryVector[wallHit].Z > 0.0 && newWeight > 0.0)
     {
       printf("Reflecting!");
-
       particles->weight[indx] = newWeight;
       particles->hitWall[indx] = 0.0;
       particles->charge[indx] = 0.0;
-      // particles->Z[indx] = boundaryVector[wallHit].Z;
       gitr_precision V0 = std::sqrt(2 * eInterpVal * 1.602e-19 / (particles->amu[indx] * 1.66e-27));
       particles->newVelocity[indx] = V0;
       vSampled[0] = V0 * std::sin(aInterpVal * 3.1415 / 180) * std::cos(2.0 * 3.1415 * r10);
       vSampled[1] = V0 * std::sin(aInterpVal * 3.1415 / 180) * std::sin(2.0 * 3.1415 * r10);
       vSampled[2] = V0 * std::cos(aInterpVal * 3.1415 / 180);
-      boundaryVector[wallHit].transformToSurface(vSampled, particles->y[indx],
-                                                 particles->x[indx], use_3d_geom,
-                                                 cylsymm );
+      boundaryVector[wallHit].transformToSurface(vSampled, particles->y[indx], particles->x[indx], use_3d_geom,cylsymm );
       particles->vx[indx] = -static_cast<gitr_precision>(boundaryVector[wallHit].inDir)  * vSampled[0];
       particles->vy[indx] = -static_cast<gitr_precision>(boundaryVector[wallHit].inDir)  * vSampled[1];
       particles->vz[indx] = -static_cast<gitr_precision>(boundaryVector[wallHit].inDir)  * vSampled[2];
@@ -365,7 +357,7 @@ void reflection::operator()(std::size_t indx) const {
       particles->yprevious[indx] = particles->y[indx] - static_cast<gitr_precision>(boundaryVector[wallHit].inDir) * surfaceNormalVector[1] * surface_buffer;
       particles->zprevious[indx] = particles->z[indx] - static_cast<gitr_precision>(boundaryVector[wallHit].inDir) * surfaceNormalVector[2] * surface_buffer;
 
-            printf("particle getting reflected mass Z charge weight %g %g %g %g\n", particles->amu[indx],  particles->Z[indx],  particles->charge[indx],  particles->weight[indx]);
+      printf("particle getting reflected mass Z charge weight %g %g %g %g\n", particles->amu[indx],  particles->Z[indx],  particles->charge[indx],  particles->weight[indx]);
       
     } 
     else 

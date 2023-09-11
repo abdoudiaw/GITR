@@ -40,7 +40,7 @@ std::vector<std::string> getVarData(netCDF::NcFile& file, const std::string& var
 
 struct ParticleData {
     std::vector<gitr_precision> xpfile, ypfile, zpfile,
-        vxpfile, vypfile, vzpfile, charge, amu, Z;
+        vxpfile, vypfile, vzpfile, charge, amu, Z, species;
 };
 
 
@@ -74,6 +74,7 @@ ParticleData readParticleData(const std::string &ncParticleSourceFile) {
         data.charge.resize(nPfile);
         data.amu.resize(nPfile);
         data.Z.resize(nPfile);
+        data.species.resize(nPfile);
 
         // Fetch the variables
         data.xpfile = getVarData<gitr_precision>(ncp.getVar("x"));
@@ -85,6 +86,7 @@ ParticleData readParticleData(const std::string &ncParticleSourceFile) {
         data.charge = getVarData<gitr_precision>(ncp.getVar("charge"));
         data.amu = getVarData<gitr_precision>(ncp.getVar("amu"));
         data.Z = getVarData<gitr_precision>(ncp.getVar("Z"));
+        data.species = getVarData<gitr_precision>(ncp.getVar("species"));
 
     } catch (netCDF::exceptions::NcException &e) {
         std::cerr << e.what() << std::endl;
@@ -105,6 +107,7 @@ ParticleData generateParticleData(const libconfig::Config &cfg, int particle_sou
     data.xpfile.resize(nP); data.ypfile.resize(nP); data.zpfile.resize(nP);
     data.vxpfile.resize(nP); data.vypfile.resize(nP); data.vzpfile.resize(nP);
     data.charge.resize(nP); data.amu.resize(nP); data.Z.resize(nP);
+    data.species.resize(nP);
 
     libconfig::Setting& speciesArray = cfg.lookup("impurityParticleSource.initialConditions.species");
     int num_species = speciesArray.getLength();
@@ -117,6 +120,7 @@ ParticleData generateParticleData(const libconfig::Config &cfg, int particle_sou
         gitr_precision _amu, _Z, _charge;
                  gitr_precision _energy_eV, _phi, _theta;
                  gitr_precision _x_start, _y_start, _z_start;
+        
                  int  _numberParticlesPerSpecies;
                  if (speciesArray[i].lookupValue("impurity_amu", _amu) &&
                      speciesArray[i].lookupValue("impurity_Z", _Z) &&
@@ -167,6 +171,7 @@ ParticleData generateParticleData(const libconfig::Config &cfg, int particle_sou
                 data.charge[particle_index] = _charge;
                 data.amu[particle_index] = _amu;
                 data.Z[particle_index] = _Z;
+                data.species[particle_index] = i;
                 
                 particle_index++;
             }
@@ -182,7 +187,7 @@ ParticleData generateParticleData(const libconfig::Config &cfg, int particle_sou
     sim::Array<gitr_precision>& px, sim::Array<gitr_precision>& py, sim::Array<gitr_precision>& pz,
     sim::Array<gitr_precision>& pvx, sim::Array<gitr_precision>& pvy, sim::Array<gitr_precision>& pvz,
     sim::Array<gitr_precision>& pZ, sim::Array<gitr_precision>& pamu, sim::Array<gitr_precision>& pcharge,
-    gitr_precision dt )
+    gitr_precision dt, sim::Array<int >& pSpecies)
     {
 
     auto& xpfile = particleData.xpfile;
@@ -194,6 +199,7 @@ ParticleData generateParticleData(const libconfig::Config &cfg, int particle_sou
     auto& charge = particleData.charge;
     auto& mass = particleData.amu;
     auto& ionizationState = particleData.Z;
+    auto& _species = particleData.species;
 
     long nParticles = particleData.Z.size();
 
@@ -208,8 +214,9 @@ ParticleData generateParticleData(const libconfig::Config &cfg, int particle_sou
         gitr_precision particleCharge = charge[i];
         gitr_precision particleMass = mass[i];
         gitr_precision ionization = ionizationState[i];
+        int species = _species[i];
 
-        particleArray->setParticleV(i, x, y, z, vx, vy, vz, ionization, particleMass, particleCharge, dt );
+        particleArray->setParticleV(i, x, y, z, vx, vy, vz, ionization, particleMass, particleCharge, dt, species);
  
         px[i] = x;
         py[i] = y;
@@ -220,6 +227,7 @@ ParticleData generateParticleData(const libconfig::Config &cfg, int particle_sou
         pZ[i] = ionization;
         pamu[i] = particleMass;
         pcharge[i] = particleCharge;
+        pSpecies[i] = species;
 
     }
 

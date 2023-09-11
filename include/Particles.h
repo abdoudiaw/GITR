@@ -56,6 +56,9 @@ public:
   sim::Array<int> tt;
   sim::Array<int> hasLeaked;
   sim::Array<gitr_precision> leakZ;
+  // add species type to particles can 0 for impurity, 1 for deuterium, ...
+  sim::Array<int> species;
+  
 #ifdef __CUDACC__
   sim::Array<curandState> stream_ionize;
 #else
@@ -87,7 +90,7 @@ public:
   CUDA_CALLABLE_MEMBER
   void setParticle(int indx, gitr_precision x, gitr_precision y, gitr_precision z,
                    gitr_precision Ex, gitr_precision Ey, gitr_precision Ez,
-                   gitr_precision Z, gitr_precision amu, gitr_precision charge)
+                   gitr_precision Z, gitr_precision amu, gitr_precision charge, int species)
   {
 
     // this->index[indx] = indx;
@@ -118,13 +121,15 @@ public:
       this->vy[indx] = 0.0;
     if (Ez == 0.0)
       this->vz[indx] = 0.0;
+    // species type
+    this->species[indx] = species;
   };
 
   CUDA_CALLABLE_MEMBER
   void setParticleV(int indx, gitr_precision x, gitr_precision y, gitr_precision z,
                     gitr_precision Vx, gitr_precision Vy, gitr_precision Vz,
                     gitr_precision Z, gitr_precision amu, gitr_precision charge,
-                    gitr_precision dt )
+                    gitr_precision dt, int species)
   {
     int indTmp = indx;
     this->index[indx] = indTmp;
@@ -144,6 +149,8 @@ public:
     this->vz[indx] = Vz;
     this->v[indx] = std::sqrt(Vx * Vx + Vy * Vy + Vz * Vz);
     this->dt[indx] = dt;
+    // species type
+    this->species[indx] = species;
   };
 
   CUDA_CALLABLE_MEMBER
@@ -247,6 +254,9 @@ public:
     this->time[n] = timeT;
     this->advance[n] = advanceT;
 
+    // species type
+    int sT = this->species[indx];
+
   };
   
   CUDA_CALLABLE_MEMBER
@@ -264,6 +274,7 @@ public:
     vy{nParticles,0.0},
     vz{nParticles,0.0},
     Z{nParticles,0.0},
+    species{nParticles,0},
     amu{nParticles,0.0},
     charge{nParticles,0.0},
     newVelocity{nParticles},
