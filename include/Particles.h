@@ -263,33 +263,7 @@ public:
     vx{nParticles,0.0},
     vy{nParticles,0.0},
     vz{nParticles,0.0},
-    // vx{nParticles,std::sqrt(static_cast<gitr_precision>(2.0*getVariable_cfg<gitr_precision>
-    //       (cfg,"impurityParticleSource.initialConditions.energy_eV")*
-    //       1.602e-19/getVariable_cfg<gitr_precision>
-    //       (cfg,"impurityParticleSource.initialConditions.impurity_amu")/1.66e-27))*
-    //       std::cos(getVariable_cfg<gitr_precision>
-    //       (cfg,"impurityParticleSource.initialConditions.theta"))*
-    //       std::sin(getVariable_cfg<gitr_precision>
-    //       (cfg,"impurityParticleSource.initialConditions.phi"))},
-    // vy{nParticles,std::sqrt(static_cast<gitr_precision>(2.0*getVariable_cfg<gitr_precision>
-    //       (cfg,"impurityParticleSource.initialConditions.energy_eV")*
-    //       1.602e-19/getVariable_cfg<gitr_precision>
-    //       (cfg,"impurityParticleSource.initialConditions.impurity_amu")/1.66e-27))*
-    //       std::sin(getVariable_cfg<gitr_precision>
-    //       (cfg,"impurityParticleSource.initialConditions.theta"))*
-    //       std::sin(getVariable_cfg<gitr_precision>
-    //       (cfg,"impurityParticleSource.initialConditions.phi"))},
-    // vz{nParticles,std::sqrt(static_cast<gitr_precision>(2.0*getVariable_cfg<gitr_precision>
-    //       (cfg,"impurityParticleSource.initialConditions.energy_eV")*
-    //       1.602e-19/getVariable_cfg<gitr_precision>
-    //       (cfg,"impurityParticleSource.initialConditions.impurity_amu")/1.66e-27))*
-    //       std::cos(getVariable_cfg<gitr_precision>
-    //       (cfg,"impurityParticleSource.initialConditions.phi"))},
     Z{nParticles,0.0},
-    // amu{nParticles,getVariable_cfg<gitr_precision>
-    //       (cfg,"impurityParticleSource.initialConditions.impurity_amu")},
-    // charge{nParticles,getVariable_cfg<gitr_precision>
-    //       (cfg,"impurityParticleSource.initialConditions.charge")},
     amu{nParticles,0.0},
     charge{nParticles,0.0},
     newVelocity{nParticles},

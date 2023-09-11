@@ -213,6 +213,36 @@ void reflection::operator()(std::size_t indx) const {
                  energyDistGrid01.data(),A_sputtRefDistIn.data(),E_sputtRefDistIn.data(),EDist_CDF_Y_regrid.data());
  
         newWeight=weight*totalYR;
+
+         // Sputtering new particles 
+        //  get wall material : boundaryVector[wallHit].Z
+            printf("Sputtering!");
+            gitr_precision mass = materialData[boundaryVector[wallHit].Z].mass; 
+            gitr_precision Eb = materialData[boundaryVector[wallHit].Z].surfaceBindingEnergy; 
+            gitr_precision vTh = std::sqrt(2.0 * Eb * 11600. / (particles->amu[indx] * 1.66e-27));
+            gitr_precision vSampled[3];
+            vSampled[0] = vTh * std::sin(aInterpVal * 3.1415 / 180) * std::cos(2.0 * 3.1415 * r10);
+            vSampled[1] = vTh * std::sin(aInterpVal * 3.1415 / 180) * std::sin(2.0 * 3.1415 * r10);
+            vSampled[2] = vTh * std::cos(aInterpVal * 3.1415 / 180);
+            // set particle properties
+            particles->Z[indx] =  boundaryVector[wallHit].Z;
+            particles->amu[indx] =  mass;
+            particles->weight[indx] =  newWeight;
+            // Transform velocity based on surface
+            boundaryVector[wallHit].transformToSurface(vSampled, particles->y[indx], 
+                                                        particles->x[indx], use_3d_geom, 
+                                                        cylsymm );
+            particles->vx[indx] = -static_cast<gitr_precision>(boundaryVector[wallHit].inDir) * vSampled[0];
+            particles->vy[indx] = -static_cast<gitr_precision>(boundaryVector[wallHit].inDir) * vSampled[1];
+            particles->vz[indx] = -static_cast<gitr_precision>(boundaryVector[wallHit].inDir) * vSampled[2];
+
+            gitr_precision surface_buffer = 1.0e-4;
+            particles->xprevious[indx] = particles->x[indx] - static_cast<gitr_precision>(boundaryVector[wallHit].inDir) * surfaceNormalVector[0] * surface_buffer;
+            particles->yprevious[indx] = particles->y[indx] - static_cast<gitr_precision>(boundaryVector[wallHit].inDir) * surfaceNormalVector[1] * surface_buffer;
+            particles->zprevious[indx] = particles->z[indx] - static_cast<gitr_precision>(boundaryVector[wallHit].inDir) * surfaceNormalVector[2] * surface_buffer;
+            
+             printf("particle being sputtered mass Z charge weight %g %g %g %g\n", particles->amu[indx],  particles->Z[indx],  particles->charge[indx],  particles->weight[indx]);
+
       if( flux_ea > 0 )
       {
         EdistInd = std::floor((eInterpVal-E0dist)/dEdist);
@@ -288,7 +318,6 @@ void reflection::operator()(std::size_t indx) const {
     #else
         surfaces->sumWeightStrike[surfaceHit] =surfaces->sumWeightStrike[surfaceHit] +weight;
         surfaces->sumParticlesStrike[surfaceHit] = surfaces->sumParticlesStrike[surfaceHit]+1;
-      //boundaryVector[wallHit].impacts = boundaryVector[wallHit].impacts +  particles->weight[indx];
     #endif
     if( flux_ea > 0 )
     {
@@ -313,9 +342,12 @@ void reflection::operator()(std::size_t indx) const {
       
     if (boundaryVector[wallHit].Z > 0.0 && newWeight > 0.0)
     {
+      printf("Reflecting!");
+
       particles->weight[indx] = newWeight;
       particles->hitWall[indx] = 0.0;
       particles->charge[indx] = 0.0;
+      // particles->Z[indx] = boundaryVector[wallHit].Z;
       gitr_precision V0 = std::sqrt(2 * eInterpVal * 1.602e-19 / (particles->amu[indx] * 1.66e-27));
       particles->newVelocity[indx] = V0;
       vSampled[0] = V0 * std::sin(aInterpVal * 3.1415 / 180) * std::cos(2.0 * 3.1415 * r10);
@@ -332,6 +364,8 @@ void reflection::operator()(std::size_t indx) const {
       particles->xprevious[indx] = particles->x[indx] - static_cast<gitr_precision>(boundaryVector[wallHit].inDir) * surfaceNormalVector[0] * surface_buffer;
       particles->yprevious[indx] = particles->y[indx] - static_cast<gitr_precision>(boundaryVector[wallHit].inDir) * surfaceNormalVector[1] * surface_buffer;
       particles->zprevious[indx] = particles->z[indx] - static_cast<gitr_precision>(boundaryVector[wallHit].inDir) * surfaceNormalVector[2] * surface_buffer;
+
+            printf("particle getting reflected mass Z charge weight %g %g %g %g\n", particles->amu[indx],  particles->Z[indx],  particles->charge[indx],  particles->weight[indx]);
       
     } 
     else 
