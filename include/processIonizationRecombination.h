@@ -43,9 +43,10 @@ inline std::tuple<size_t, size_t, size_t, std::vector<double>, std::vector<doubl
     }
     std::string input_path = "input/adasData/";
     std::string ratesFiles = "ADAS_Rates_" + std::to_string(charge) + ".nc";
-
+    
     // Open the netCDF file
     netCDF::NcFile data(input_path + ratesFiles, netCDF::NcFile::read);
+
 
     // Get the variable objects
     netCDF::NcVar gridTemperature_var = data.getVar("gridTemperature_" + filePrefix);

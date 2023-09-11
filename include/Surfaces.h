@@ -9,6 +9,7 @@
 
 #include "array.h"
 #include <cstdlib>
+#include <string>
 
 #ifdef __CUDACC__
 #include <thrust/host_vector.h>
@@ -31,6 +32,7 @@ typedef float gitr_precision;
 class Surfaces : public ManagedAllocation {
 public: 
   int nSurfaces;  
+  // std::string materialName;
   int nE;
   int nA;
   gitr_precision E0;
@@ -52,7 +54,6 @@ public:
   sim::Array<gitr_precision> reflDistribution;
 
   CUDA_CALLABLE_MEMBER
-  
   void setSurface(int nE, gitr_precision E0, gitr_precision E, int nA, gitr_precision A0, gitr_precision A) {
     this->nE = nE;
     this->E0 = E0;
@@ -65,15 +66,17 @@ public:
     for (int i = 0; i < nE; i++) {
       this->gridE[i] = E0 + static_cast<gitr_precision>(i) * dE;
     }
-
     for (int i = 0; i < nA; i++) {
       this->gridA[i] = A0 + static_cast<gitr_precision>(i) * dA;
     }
   };
 
   CUDA_CALLABLE_MEMBER
-  Surfaces(std::size_t nS,std::size_t nE, std::size_t nA) :
+  Surfaces(std::size_t nS,
+  //  const std::string& materialName, 
+  std::size_t nE, std::size_t nA) :
    sumParticlesStrike{nS,0}, gridE{nE,0.0}, gridA{nA,0.0},
+  //  , materialName{materialName},
    sumWeightStrike{nS,0.0}, grossDeposition{nS,0.0},
     grossErosion{nS,0.0}, aveSputtYld{nS,0.0}, sputtYldCount{nS,0},
    energyDistribution{nS*nE*nA,0.0},sputtDistribution{nS*nE*nA,0.0},
@@ -81,4 +84,4 @@ public:
 
 };
 
-#endif
+#endif // _SURFACES_

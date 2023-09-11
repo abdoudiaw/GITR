@@ -34,6 +34,7 @@ target_link_libraries( geometry_check boris )
 # Improvement: Conditionally link based on whether the GITR_USE_<component> clause is enabled
 target_link_libraries( GITR 
               interpolator2
+              materials
                        ionize
                        interp2d
                        netcdf 

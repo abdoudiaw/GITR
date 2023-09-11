@@ -1,4 +1,7 @@
 #include "surfaceModel.h"
+#include "surfaceReact.h"
+#include "interp2d.hpp"
+#include "materials.h"
 
     /* constructor */
     reflection::reflection(Particles* _particles, double _dt,
@@ -9,35 +12,6 @@
 #endif
             int _nLines,Boundary * _boundaryVector,
             Surfaces * _surfaces,
-    int _nE_sputtRefCoeff,
-    int _nA_sputtRefCoeff,
-    gitr_precision* _A_sputtRefCoeff,
-    gitr_precision* _Elog_sputtRefCoeff,
-    gitr_precision* _spyl_surfaceModel,
-    gitr_precision* _rfyl_surfaceModel,
-    int _nE_sputtRefDistOut,
-    int _nE_sputtRefDistOutRef,
-    int _nA_sputtRefDistOut,
-    int _nE_sputtRefDistIn,
-    int _nA_sputtRefDistIn,
-    gitr_precision* _E_sputtRefDistIn,
-    gitr_precision* _A_sputtRefDistIn,
-    gitr_precision* _E_sputtRefDistOut,
-    gitr_precision* _E_sputtRefDistOutRef,
-    gitr_precision* _A_sputtRefDistOut,
-    gitr_precision* _energyDistGrid01,
-    gitr_precision* _energyDistGrid01Ref,
-    gitr_precision* _angleDistGrid01,
-    gitr_precision* _EDist_CDF_Y_regrid,
-    gitr_precision* _ADist_CDF_Y_regrid, 
-    gitr_precision* _EDist_CDF_R_regrid,
-    gitr_precision* _ADist_CDF_R_regrid,
-    int _nEdist,
-    gitr_precision _E0dist,
-    gitr_precision _Edist,
-    int _nAdist,
-    gitr_precision _A0dist,
-    gitr_precision _Adist,
     int flux_ea_,
     int use_3d_geom_,
     int cylsymm_ ) :
@@ -46,35 +20,6 @@
                              nLines(_nLines),
                              boundaryVector(_boundaryVector),
                              surfaces(_surfaces),
-                             nE_sputtRefCoeff(_nE_sputtRefCoeff),
-                             nA_sputtRefCoeff(_nA_sputtRefCoeff),
-                             A_sputtRefCoeff(_A_sputtRefCoeff),
-                             Elog_sputtRefCoeff(_Elog_sputtRefCoeff),
-                             spyl_surfaceModel(_spyl_surfaceModel),
-                             rfyl_surfaceModel(_rfyl_surfaceModel),
-                             nE_sputtRefDistOut(_nE_sputtRefDistOut),
-                             nE_sputtRefDistOutRef(_nE_sputtRefDistOutRef),
-                             nA_sputtRefDistOut(_nA_sputtRefDistOut),
-                             nE_sputtRefDistIn(_nE_sputtRefDistIn),
-                             nA_sputtRefDistIn(_nA_sputtRefDistIn),
-                             E_sputtRefDistIn(_E_sputtRefDistIn),
-                             A_sputtRefDistIn(_A_sputtRefDistIn),
-                             E_sputtRefDistOut(_E_sputtRefDistOut),
-                             E_sputtRefDistOutRef(_E_sputtRefDistOutRef),
-                             A_sputtRefDistOut(_A_sputtRefDistOut),
-                             energyDistGrid01(_energyDistGrid01),
-                             energyDistGrid01Ref(_energyDistGrid01Ref),
-                             angleDistGrid01(_angleDistGrid01),
-                             EDist_CDF_Y_regrid(_EDist_CDF_Y_regrid),
-                             ADist_CDF_Y_regrid(_ADist_CDF_Y_regrid),
-                             EDist_CDF_R_regrid(_EDist_CDF_R_regrid),
-                             ADist_CDF_R_regrid(_ADist_CDF_R_regrid),
-                             nEdist(_nEdist),
-                             E0dist(_E0dist),
-                             Edist(_Edist),
-                             nAdist(_nAdist),
-                             A0dist(_A0dist),
-                             Adist(_Adist),
                              state(_state),
                              flux_ea( flux_ea_ ),
                              use_3d_geom( use_3d_geom_ ),
@@ -84,8 +29,29 @@
 CUDA_CALLABLE_MEMBER_DEVICE
 void reflection::operator()(std::size_t indx) const {
     
-  if (particles->hitWall[indx] == 1.0) 
+     if (particles->hitWall[indx] == 1.0) 
   {
+
+  int wallHit = particles->surfaceHit[indx];
+  int surfaceHit = boundaryVector[wallHit].surfaceNumber;
+  int surface = boundaryVector[wallHit].surface;
+  std::string targetMaterial = materialData[boundaryVector[wallHit].Z].name;  
+  std::string incidentMaterial = materialData[particles->Z[indx]].name;
+
+  printf("material: %s\n",targetMaterial.c_str());
+  printf("incidentName: %s\n",incidentMaterial.c_str());
+  
+  auto surfaceDataResult = processSurfaceData(incidentMaterial, targetMaterial); 
+
+  auto [nE_sputtRefCoeff, nA_sputtRefCoeff, E_sputtRefCoeff, A_sputtRefCoeff, Elog_sputtRefCoeff, energyDistGrid01, angleDistGrid01, spyl_surfaceModel, rfyl_surfaceModel,nE_sputtRefDistIn, nA_sputtRefDistIn,
+        E_sputtRefDistIn, A_sputtRefDistIn, Elog_sputtRefDistIn, E_sputtRefDistOut, E_sputtRefDistOutRef, Aphi_sputtRefDistOut, Atheta_sputtRefDistOut, EDist_Y, AphiDist_Y, AthetaDist_Y,
+      EDist_R, AphiDist_R, AthetaDist_R, nDistE_surfaceModel, nDistA_surfaceModel, nDistE_surfaceModelRef, nE_sputtRefDistOut, nA_sputtRefDistOut,
+      energyDistGrid01Ref, EDist_CDF_Y, AphiDist_CDF_Y, AthetaDist_CDF_Y, EDist_CDF_R, AphiDist_CDF_R, AthetaDist_CDF_R, EDist_CDF_Y_regrid, AphiDist_CDF_Y_regrid,
+        AthetaDist_CDF_Y_regrid, EDist_CDF_R_regrid, ADist_CDF_R_regrid, AthetaDist_CDF_R_regrid,
+      spylAInterpVal, spylAthetaInterpVal, sputEInterpVal, rfylAInterpVal, rfylAthetaInterpVal, rflEInterpVal,
+        nEdist, nAdist, E0dist, Edist, A0dist, Adist, nE_sputtRefDistOutRef
+      ] = surfaceDataResult;
+
     gitr_precision E0_for_surface_model = 0.0;
     gitr_precision E0_for_flux_binning = 0.0;
     gitr_precision thetaImpact = 0.0;
@@ -105,9 +71,6 @@ void reflection::operator()(std::size_t indx) const {
     gitr_precision R0 = 0.0;
     gitr_precision totalYR = 0.0;
     gitr_precision newWeight = 0.0;
-    int wallHit = particles->surfaceHit[indx];
-    int surfaceHit = boundaryVector[wallHit].surfaceNumber;
-    int surface = boundaryVector[wallHit].surface;
     gitr_precision eInterpVal = 0.0;
     gitr_precision aInterpVal = 0.0;
     gitr_precision weight = particles->weight[indx];
@@ -118,7 +81,7 @@ void reflection::operator()(std::size_t indx) const {
     int EdistInd = 0;
     gitr_precision dEdist;
     gitr_precision dAdist;
-
+    
     if( flux_ea > 0 )
     {
       dEdist = (Edist - E0dist) / static_cast<gitr_precision>(nEdist);
@@ -159,12 +122,8 @@ void reflection::operator()(std::size_t indx) const {
     }
     if (boundaryVector[wallHit].Z > 0.0) 
     {
-      Y0 = interp2d(thetaImpact, std::log10(E0_for_surface_model), nA_sputtRefCoeff,
-                    nE_sputtRefCoeff, A_sputtRefCoeff,
-                    Elog_sputtRefCoeff, spyl_surfaceModel);
-      R0 = interp2d(thetaImpact, std::log10(E0_for_surface_model), nA_sputtRefCoeff,
-                    nE_sputtRefCoeff, A_sputtRefCoeff,
-                    Elog_sputtRefCoeff, rfyl_surfaceModel);
+      Y0 = interp2d(thetaImpact, std::log10(E0_for_surface_model), nA_sputtRefCoeff, nE_sputtRefCoeff, A_sputtRefCoeff.data(), Elog_sputtRefCoeff.data(), spyl_surfaceModel.data()); 
+      R0 = interp2d(thetaImpact, std::log10(E0_for_surface_model), nA_sputtRefCoeff, nE_sputtRefCoeff, A_sputtRefCoeff.data(), Elog_sputtRefCoeff.data(), rfyl_surfaceModel.data());
     } 
     else 
     {
@@ -196,15 +155,18 @@ void reflection::operator()(std::size_t indx) const {
       if(r7 > sputtProb) //reflects
       {
         didReflect = 1;
-        aInterpVal = interp3d (r8,thetaImpact,std::log10(E0_for_surface_model),
-              nA_sputtRefDistOut,nA_sputtRefDistIn,nE_sputtRefDistIn,
-                        angleDistGrid01,A_sputtRefDistIn,
-                        E_sputtRefDistIn,ADist_CDF_R_regrid);
-         eInterpVal = interp3d ( r9,thetaImpact,std::log10(E0_for_surface_model),
-               nE_sputtRefDistOutRef,nA_sputtRefDistIn,nE_sputtRefDistIn,
-                             energyDistGrid01Ref,A_sputtRefDistIn,
-                             E_sputtRefDistIn,EDist_CDF_R_regrid );
+        aInterpVal = interp3d(r8, thetaImpact, std::log10(E0_for_surface_model),
+                      nA_sputtRefDistOut, nA_sputtRefDistIn, nE_sputtRefDistIn,
+                      angleDistGrid01.data(), A_sputtRefDistIn.data(),
+                      E_sputtRefDistIn.data(), ADist_CDF_R_regrid.data());
 
+        eInterpVal = interp3d(r9, thetaImpact, std::log10(E0_for_surface_model),
+                      nE_sputtRefDistOutRef, nA_sputtRefDistIn, nE_sputtRefDistIn,
+                      energyDistGrid01Ref.data(), A_sputtRefDistIn.data(),
+                      E_sputtRefDistIn.data(), EDist_CDF_R_regrid.data());
+      
+      
+  
          newWeight = weight*(totalYR);
 
         if( flux_ea > 0 )
@@ -238,16 +200,18 @@ void reflection::operator()(std::size_t indx) const {
         #endif
         }
       }
+
       else //sputters
       {
+        // gitr_precision* _ADist_CDF_Y_regrid ; 
         aInterpVal = interp3d(r8,thetaImpact,std::log10(E0_for_surface_model),
                 nA_sputtRefDistOut,nA_sputtRefDistIn,nE_sputtRefDistIn,
-                angleDistGrid01,A_sputtRefDistIn,
-                E_sputtRefDistIn,ADist_CDF_Y_regrid);
+                angleDistGrid01.data(),A_sputtRefDistIn.data(),
+                E_sputtRefDistIn.data(),AphiDist_CDF_Y_regrid.data());
         eInterpVal = interp3d(r9,thetaImpact,std::log10(E0_for_surface_model),
                  nE_sputtRefDistOut,nA_sputtRefDistIn,nE_sputtRefDistIn,
-                 energyDistGrid01,A_sputtRefDistIn,E_sputtRefDistIn,EDist_CDF_Y_regrid);
-		    
+                 energyDistGrid01.data(),A_sputtRefDistIn.data(),E_sputtRefDistIn.data(),EDist_CDF_Y_regrid.data());
+ 
         newWeight=weight*totalYR;
       if( flux_ea > 0 )
       {
@@ -324,6 +288,7 @@ void reflection::operator()(std::size_t indx) const {
     #else
         surfaces->sumWeightStrike[surfaceHit] =surfaces->sumWeightStrike[surfaceHit] +weight;
         surfaces->sumParticlesStrike[surfaceHit] = surfaces->sumParticlesStrike[surfaceHit]+1;
+      //boundaryVector[wallHit].impacts = boundaryVector[wallHit].impacts +  particles->weight[indx];
     #endif
     if( flux_ea > 0 )
     {

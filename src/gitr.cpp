@@ -19,7 +19,6 @@
 //------------------------------------------------------------------------------
 
 
-
 #include "Boundary.h"
 //#include "Fields.h"
 #include "Particles.h"
@@ -61,7 +60,8 @@
 // AD
 #include <numeric> 
 #include "getParticleData.h"
-
+//#include "surfaceReact.h"
+#include "materials.h"
 #ifdef __CUDACC__
 #include <curand.h>
 #include <curand_kernel.h>
@@ -86,6 +86,12 @@
 #include "CLI/CLI.hpp"
 
 using namespace netCDF;
+
+
+#include <vector>
+#include <netcdf>
+
+
 
 
 #if USE_DOUBLE
@@ -2484,284 +2490,7 @@ if( presheath_interp == 1 )
   MPI_Bcast(&perpDiffusionCoeff, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
   MPI_Barrier(MPI_COMM_WORLD);
 #endif
-  // Surface model import
-  int nE_sputtRefCoeff = 1, nA_sputtRefCoeff = 1;
-  int nE_sputtRefDistIn = 1, nA_sputtRefDistIn = 1;
-  int nE_sputtRefDistOut = 1, nA_sputtRefDistOut = 1;
-  int nE_sputtRefDistOutRef = 1, nDistE_surfaceModelRef = 1;
-  int nDistE_surfaceModel = 1, nDistA_surfaceModel = 1;
-  std::string surfaceModelCfg = "surfaceModel.";
-  std::string surfaceModelFile;
-  if( surface_model > 0 )
-  {
-#if USE_MPI > 0
-  if (world_rank == 0) {
-#endif
-    getVariable(cfg, surfaceModelCfg + "fileString", surfaceModelFile);
-    nE_sputtRefCoeff = getDimFromFile(cfg, input_path + surfaceModelFile,
-                                      surfaceModelCfg, "nEsputtRefCoeffString");
-    nA_sputtRefCoeff = getDimFromFile(cfg, input_path + surfaceModelFile,
-                                      surfaceModelCfg, "nAsputtRefCoeffString");
-    nE_sputtRefDistIn =
-        getDimFromFile(cfg, input_path + surfaceModelFile, surfaceModelCfg,
-                       "nEsputtRefDistInString");
-    nA_sputtRefDistIn =
-        getDimFromFile(cfg, input_path + surfaceModelFile, surfaceModelCfg,
-                       "nAsputtRefDistInString");
-    nE_sputtRefDistOut =
-        getDimFromFile(cfg, input_path + surfaceModelFile, surfaceModelCfg,
-                       "nEsputtRefDistOutString");
-    nE_sputtRefDistOutRef =
-        getDimFromFile(cfg, input_path + surfaceModelFile, surfaceModelCfg,
-                       "nEsputtRefDistOutStringRef");
-    nA_sputtRefDistOut =
-        getDimFromFile(cfg, input_path + surfaceModelFile, surfaceModelCfg,
-                       "nAsputtRefDistOutString");
-    nDistE_surfaceModel =
-        nE_sputtRefDistIn * nA_sputtRefDistIn * nE_sputtRefDistOut;
-    nDistE_surfaceModelRef =
-        nE_sputtRefDistIn * nA_sputtRefDistIn * nE_sputtRefDistOutRef;
-    nDistA_surfaceModel =
-        nE_sputtRefDistIn * nA_sputtRefDistIn * nA_sputtRefDistOut;
-    std::cout << " got dimensions of surface model " << std::endl;
-#if USE_MPI > 0
-  }
-  MPI_Bcast(&nE_sputtRefCoeff, 1, MPI_INT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(&nA_sputtRefCoeff, 1, MPI_INT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(&nE_sputtRefDistIn, 1, MPI_INT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(&nA_sputtRefDistIn, 1, MPI_INT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(&nE_sputtRefDistOut, 1, MPI_INT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(&nE_sputtRefDistOutRef, 1, MPI_INT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(&nA_sputtRefDistOut, 1, MPI_INT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(&nDistE_surfaceModel, 1, MPI_INT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(&nDistE_surfaceModelRef, 1, MPI_INT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(&nDistA_surfaceModel, 1, MPI_INT, 0, MPI_COMM_WORLD);
-  MPI_Barrier(MPI_COMM_WORLD);
-#endif
-  }
-  sim::Array<gitr_precision> E_sputtRefCoeff(nE_sputtRefCoeff),
-      A_sputtRefCoeff(nA_sputtRefCoeff), Elog_sputtRefCoeff(nE_sputtRefCoeff),
-      energyDistGrid01(nE_sputtRefDistOut),
-      energyDistGrid01Ref(nE_sputtRefDistOutRef),
-      angleDistGrid01(nA_sputtRefDistOut),
-      spyl_surfaceModel(nE_sputtRefCoeff * nA_sputtRefCoeff),
-      rfyl_surfaceModel(nE_sputtRefCoeff * nA_sputtRefCoeff),
-      E_sputtRefDistIn(nE_sputtRefDistIn), A_sputtRefDistIn(nA_sputtRefDistIn),
-      Elog_sputtRefDistIn(nE_sputtRefDistIn),
-      E_sputtRefDistOut(nE_sputtRefDistOut),
-      E_sputtRefDistOutRef(nE_sputtRefDistOutRef),
-      Aphi_sputtRefDistOut(nA_sputtRefDistOut),
-      Atheta_sputtRefDistOut(nA_sputtRefDistOut),
-      AphiDist_Y(nDistA_surfaceModel), AthetaDist_Y(nDistA_surfaceModel),
-      EDist_Y(nDistE_surfaceModel), AphiDist_R(nDistA_surfaceModel),
-      AthetaDist_R(nDistA_surfaceModel), EDist_R(nDistE_surfaceModelRef),
-      AphiDist_CDF_Y(nDistA_surfaceModel),
-      AthetaDist_CDF_Y(nDistA_surfaceModel), EDist_CDF_Y(nDistE_surfaceModel),
-      AphiDist_CDF_R(nDistA_surfaceModel),
-      AthetaDist_CDF_R(nDistA_surfaceModel),
-      EDist_CDF_R(nDistE_surfaceModelRef),
-      AphiDist_CDF_Y_regrid(nDistA_surfaceModel),
-      AthetaDist_CDF_Y_regrid(nDistA_surfaceModel),
-      EDist_CDF_Y_regrid(nDistE_surfaceModel),
-      AphiDist_CDF_R_regrid(nDistA_surfaceModel),
-      AthetaDist_CDF_R_regrid(nDistA_surfaceModel),
-      EDist_CDF_R_regrid(nDistE_surfaceModelRef);
 
-  if( surface_model > 0 )
-  {
-#if USE_MPI > 0
-  if (world_rank == 0) {
-#endif
-    getVarFromFile(cfg, input_path + surfaceModelFile, surfaceModelCfg,
-                   "E_sputtRefCoeff", E_sputtRefCoeff[0]);
-    getVarFromFile(cfg, input_path + surfaceModelFile, surfaceModelCfg,
-                   "A_sputtRefCoeff", A_sputtRefCoeff[0]);
-    getVarFromFile(cfg, input_path + surfaceModelFile, surfaceModelCfg,
-                   "E_sputtRefDistIn", E_sputtRefDistIn[0]);
-    getVarFromFile(cfg, input_path + surfaceModelFile, surfaceModelCfg,
-                   "A_sputtRefDistIn", A_sputtRefDistIn[0]);
-    getVarFromFile(cfg, input_path + surfaceModelFile, surfaceModelCfg,
-                   "E_sputtRefDistOut", E_sputtRefDistOut[0]);
-    getVarFromFile(cfg, input_path + surfaceModelFile, surfaceModelCfg,
-                   "E_sputtRefDistOutRef", E_sputtRefDistOutRef[0]);
-    getVarFromFile(cfg, input_path + surfaceModelFile, surfaceModelCfg,
-                   "Aphi_sputtRefDistOut", Aphi_sputtRefDistOut[0]);
-    getVarFromFile(cfg, input_path + surfaceModelFile, surfaceModelCfg,
-                   "Atheta_sputtRefDistOut", Atheta_sputtRefDistOut[0]);
-    getVarFromFile(cfg, input_path + surfaceModelFile, surfaceModelCfg,
-                   "sputtYldString", spyl_surfaceModel[0]);
-    getVarFromFile(cfg, input_path + surfaceModelFile, surfaceModelCfg,
-                   "reflYldString", rfyl_surfaceModel[0]);
-    getVarFromFile(cfg, input_path + surfaceModelFile, surfaceModelCfg,
-                   "EDist_Y", EDist_Y[0]);
-    getVarFromFile(cfg, input_path + surfaceModelFile, surfaceModelCfg,
-                   "AphiDist_Y", AphiDist_Y[0]);
-    getVarFromFile(cfg, input_path + surfaceModelFile, surfaceModelCfg,
-                   "AthetaDist_Y", AthetaDist_Y[0]);
-    getVarFromFile(cfg, input_path + surfaceModelFile, surfaceModelCfg,
-                   "EDist_R", EDist_R[0]);
-    getVarFromFile(cfg, input_path + surfaceModelFile, surfaceModelCfg,
-                   "AphiDist_R", AphiDist_R[0]);
-    getVarFromFile(cfg, input_path + surfaceModelFile, surfaceModelCfg,
-                   "AthetaDist_R", AthetaDist_R[0]);
-
-    for (int i = 0; i < nE_sputtRefCoeff; i++) {
-      Elog_sputtRefCoeff[i] = log10(E_sputtRefCoeff[i]);
-      std::cout << " EsputtRefCoeff and Elog " << E_sputtRefCoeff[i] << " "
-                << Elog_sputtRefCoeff[i] << std::endl;
-    }
-    for (int i = 0; i < nE_sputtRefDistIn; i++) {
-      Elog_sputtRefDistIn[i] = std::log10(E_sputtRefDistIn[i]);
-    }
-    for (int i = 0; i < nE_sputtRefDistOut; i++) {
-      energyDistGrid01[i] = i * 1.0 / nE_sputtRefDistOut;
-    }
-    for (int i = 0; i < nE_sputtRefDistOutRef; i++) {
-      energyDistGrid01Ref[i] = i * 1.0 / nE_sputtRefDistOutRef;
-    }
-    for (int i = 0; i < nA_sputtRefDistOut; i++) {
-      angleDistGrid01[i] = i * 1.0 / nA_sputtRefDistOut;
-    }
-    make2dCDF(nE_sputtRefDistIn, nA_sputtRefDistIn, nE_sputtRefDistOut,
-              EDist_Y.data(), EDist_CDF_Y.data());
-    make2dCDF(nE_sputtRefDistIn, nA_sputtRefDistIn, nA_sputtRefDistOut,
-              AphiDist_Y.data(), AphiDist_CDF_Y.data());
-    make2dCDF(nE_sputtRefDistIn, nA_sputtRefDistIn, nA_sputtRefDistOut,
-              AthetaDist_Y.data(), AthetaDist_CDF_Y.data());
-    make2dCDF(nE_sputtRefDistIn, nA_sputtRefDistIn, nE_sputtRefDistOutRef,
-              EDist_R.data(), EDist_CDF_R.data());
-    make2dCDF(nE_sputtRefDistIn, nA_sputtRefDistIn, nA_sputtRefDistOut,
-              AphiDist_R.data(), AphiDist_CDF_R.data());
-    make2dCDF(nE_sputtRefDistIn, nA_sputtRefDistIn, nA_sputtRefDistOut,
-              AthetaDist_R.data(), AthetaDist_CDF_R.data());
-    make2dCDF(nE_sputtRefDistIn, nA_sputtRefDistIn, nA_sputtRefDistOut,
-              AthetaDist_R.data(), AthetaDist_CDF_R.data());
-    regrid2dCDF(nE_sputtRefDistIn, nA_sputtRefDistIn, nA_sputtRefDistOut,
-                angleDistGrid01.data(), nA_sputtRefDistOut,
-                Aphi_sputtRefDistOut[nA_sputtRefDistOut - 1],
-                AphiDist_CDF_Y.data(), AphiDist_CDF_Y_regrid.data());
-    regrid2dCDF(nE_sputtRefDistIn, nA_sputtRefDistIn, nA_sputtRefDistOut,
-                angleDistGrid01.data(), nA_sputtRefDistOut,
-                Atheta_sputtRefDistOut[nA_sputtRefDistOut - 1],
-                AthetaDist_CDF_Y.data(), AthetaDist_CDF_Y_regrid.data());
-    regrid2dCDF(nE_sputtRefDistIn, nA_sputtRefDistIn, nE_sputtRefDistOut,
-                energyDistGrid01.data(), nE_sputtRefDistOut,
-                E_sputtRefDistOut[nE_sputtRefDistOut - 1], EDist_CDF_Y.data(),
-                EDist_CDF_Y_regrid.data());
-    regrid2dCDF(nE_sputtRefDistIn, nA_sputtRefDistIn, nA_sputtRefDistOut,
-                angleDistGrid01.data(), nA_sputtRefDistOut,
-                Aphi_sputtRefDistOut[nA_sputtRefDistOut - 1],
-                AphiDist_CDF_R.data(), AphiDist_CDF_R_regrid.data());
-    regrid2dCDF(nE_sputtRefDistIn, nA_sputtRefDistIn, nA_sputtRefDistOut,
-                angleDistGrid01.data(), nA_sputtRefDistOut,
-                Atheta_sputtRefDistOut[nA_sputtRefDistOut - 1],
-                AthetaDist_CDF_R.data(), AthetaDist_CDF_R_regrid.data());
-    regrid2dCDF(nE_sputtRefDistIn, nA_sputtRefDistIn, nE_sputtRefDistOutRef,
-                energyDistGrid01Ref.data(), nE_sputtRefDistOutRef,
-                E_sputtRefDistOutRef[nE_sputtRefDistOutRef - 1],
-                EDist_CDF_R.data(), EDist_CDF_R_regrid.data());
-   
-    gitr_precision spylAInterpVal = interp3d(
-        0.44, 5.0, std::log10(250.0), nA_sputtRefDistOut, nA_sputtRefDistIn,
-        nE_sputtRefDistIn, angleDistGrid01.data(), A_sputtRefDistIn.data(),
-        Elog_sputtRefDistIn.data(), AphiDist_CDF_Y_regrid.data());
-    gitr_precision spylAthetaInterpVal = interp3d(
-        0.44, 5.0, std::log10(250.0), nA_sputtRefDistOut, nA_sputtRefDistIn,
-        nE_sputtRefDistIn, angleDistGrid01.data(), A_sputtRefDistIn.data(),
-        Elog_sputtRefDistIn.data(), AthetaDist_CDF_Y_regrid.data());
-    gitr_precision sputEInterpVal = interp3d(
-        0.44, 63.0, std::log10(10.0), nE_sputtRefDistOut, nA_sputtRefDistIn,
-        nE_sputtRefDistIn, energyDistGrid01.data(), A_sputtRefDistIn.data(),
-        Elog_sputtRefDistIn.data(), EDist_CDF_Y_regrid.data());
-    gitr_precision rfylAInterpVal = interp3d(
-        0.44, 5.0, std::log10(250.0), nA_sputtRefDistOut, nA_sputtRefDistIn,
-        nE_sputtRefDistIn, angleDistGrid01.data(), A_sputtRefDistIn.data(),
-        Elog_sputtRefDistIn.data(), AphiDist_CDF_R_regrid.data());
-    gitr_precision rfylAthetaInterpVal = interp3d(
-        0.44, 5.0, std::log10(250.0), nA_sputtRefDistOut, nA_sputtRefDistIn,
-        nE_sputtRefDistIn, angleDistGrid01.data(), A_sputtRefDistIn.data(),
-        Elog_sputtRefDistIn.data(), AthetaDist_CDF_R_regrid.data());
-    gitr_precision rflEInterpVal = interp3d(
-        0.44, 63.0, std::log10(10.0), nE_sputtRefDistOut, nA_sputtRefDistIn,
-        nE_sputtRefDistIn, energyDistGrid01.data(), A_sputtRefDistIn.data(),
-        Elog_sputtRefDistIn.data(), EDist_CDF_R_regrid.data());
-
-    std::cout << "Finished surface model import sputtering" << spylAInterpVal
-              << " " << spylAthetaInterpVal << " " << sputEInterpVal
-              << std::endl;
-    std::cout << "Finished surface model import reflection" << rfylAInterpVal
-              << " " << rfylAthetaInterpVal << " " << rflEInterpVal
-              << std::endl;
-#if USE_MPI > 0
-  }
-  MPI_Bcast(E_sputtRefCoeff.data(), nE_sputtRefCoeff, MPI_FLOAT, 0,
-            MPI_COMM_WORLD);
-  MPI_Bcast(A_sputtRefCoeff.data(), nA_sputtRefCoeff, MPI_FLOAT, 0,
-            MPI_COMM_WORLD);
-  MPI_Bcast(Elog_sputtRefCoeff.data(), nE_sputtRefCoeff, MPI_FLOAT, 0,
-            MPI_COMM_WORLD);
-  MPI_Bcast(energyDistGrid01.data(), nE_sputtRefDistOut, MPI_FLOAT, 0,
-            MPI_COMM_WORLD);
-  MPI_Bcast(energyDistGrid01Ref.data(), nE_sputtRefDistOutRef, MPI_FLOAT, 0,
-            MPI_COMM_WORLD);
-  MPI_Bcast(angleDistGrid01.data(), nA_sputtRefDistOut, MPI_FLOAT, 0,
-            MPI_COMM_WORLD);
-  MPI_Bcast(spyl_surfaceModel.data(), nE_sputtRefCoeff * nA_sputtRefCoeff,
-            MPI_FLOAT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(rfyl_surfaceModel.data(), nE_sputtRefCoeff * nA_sputtRefCoeff,
-            MPI_FLOAT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(E_sputtRefDistIn.data(), nE_sputtRefDistIn, MPI_FLOAT, 0,
-            MPI_COMM_WORLD);
-  MPI_Bcast(A_sputtRefDistIn.data(), nA_sputtRefDistIn, MPI_FLOAT, 0,
-            MPI_COMM_WORLD);
-  MPI_Bcast(Elog_sputtRefDistIn.data(), nE_sputtRefDistIn, MPI_FLOAT, 0,
-            MPI_COMM_WORLD);
-  MPI_Bcast(E_sputtRefDistOut.data(), nE_sputtRefDistOut, MPI_FLOAT, 0,
-            MPI_COMM_WORLD);
-  MPI_Bcast(E_sputtRefDistOutRef.data(), nE_sputtRefDistOutRef, MPI_FLOAT, 0,
-            MPI_COMM_WORLD);
-  MPI_Bcast(Aphi_sputtRefDistOut.data(), nA_sputtRefDistOut, MPI_FLOAT, 0,
-            MPI_COMM_WORLD);
-  MPI_Bcast(Atheta_sputtRefDistOut.data(), nA_sputtRefDistOut, MPI_FLOAT, 0,
-            MPI_COMM_WORLD);
-  MPI_Bcast(AphiDist_Y.data(), nDistA_surfaceModel, MPI_FLOAT, 0,
-            MPI_COMM_WORLD);
-  MPI_Bcast(AthetaDist_Y.data(), nDistA_surfaceModel, MPI_FLOAT, 0,
-            MPI_COMM_WORLD);
-  MPI_Bcast(EDist_Y.data(), nDistE_surfaceModel, MPI_FLOAT, 0, MPI_COMM_WORLD);
-  MPI_Bcast(AphiDist_R.data(), nDistA_surfaceModel, MPI_FLOAT, 0,
-            MPI_COMM_WORLD);
-  MPI_Bcast(AthetaDist_R.data(), nDistA_surfaceModel, MPI_FLOAT, 0,
-            MPI_COMM_WORLD);
-  MPI_Bcast(EDist_R.data(), nDistE_surfaceModelRef, MPI_FLOAT, 0,
-            MPI_COMM_WORLD);
-  MPI_Bcast(AphiDist_CDF_Y.data(), nDistA_surfaceModel, MPI_FLOAT, 0,
-            MPI_COMM_WORLD);
-  MPI_Bcast(AthetaDist_CDF_Y.data(), nDistA_surfaceModel, MPI_FLOAT, 0,
-            MPI_COMM_WORLD);
-  MPI_Bcast(EDist_CDF_Y.data(), nDistE_surfaceModel, MPI_FLOAT, 0,
-            MPI_COMM_WORLD);
-  MPI_Bcast(AphiDist_CDF_R.data(), nDistA_surfaceModel, MPI_FLOAT, 0,
-            MPI_COMM_WORLD);
-  MPI_Bcast(AthetaDist_CDF_R.data(), nDistA_surfaceModel, MPI_FLOAT, 0,
-            MPI_COMM_WORLD);
-  MPI_Bcast(EDist_CDF_R.data(), nDistE_surfaceModelRef, MPI_FLOAT, 0,
-            MPI_COMM_WORLD);
-  MPI_Bcast(AphiDist_CDF_Y_regrid.data(), nDistA_surfaceModel, MPI_FLOAT, 0,
-            MPI_COMM_WORLD);
-  MPI_Bcast(AthetaDist_CDF_Y_regrid.data(), nDistA_surfaceModel, MPI_FLOAT, 0,
-            MPI_COMM_WORLD);
-  MPI_Bcast(EDist_CDF_Y_regrid.data(), nDistE_surfaceModel, MPI_FLOAT, 0,
-            MPI_COMM_WORLD);
-  MPI_Bcast(AphiDist_CDF_R_regrid.data(), nDistA_surfaceModel, MPI_FLOAT, 0,
-            MPI_COMM_WORLD);
-  MPI_Bcast(AthetaDist_CDF_R_regrid.data(), nDistA_surfaceModel, MPI_FLOAT, 0,
-            MPI_COMM_WORLD);
-  MPI_Bcast(EDist_CDF_R_regrid.data(), nDistE_surfaceModelRef, MPI_FLOAT, 0,
-            MPI_COMM_WORLD);
-  MPI_Barrier(MPI_COMM_WORLD);
-#endif
-  }
 #ifdef __CUDACC__
   cout << "Using THRUST" << endl;
 #else
@@ -3073,19 +2802,7 @@ if( presheath_interp == 1 )
       bfieldGridr.data(), &bfieldGridz.front(), &br.front(), &bz.front(),
       &by.front(), cylsymm );
 
-  reflection reflection0(
-      particleArray, dt, &state1.front(), nLines, &boundaries[0], surfaces,
-      nE_sputtRefCoeff, nA_sputtRefCoeff, A_sputtRefCoeff.data(),
-      Elog_sputtRefCoeff.data(), spyl_surfaceModel.data(),
-      rfyl_surfaceModel.data(), nE_sputtRefDistOut, nE_sputtRefDistOutRef,
-      nA_sputtRefDistOut, nE_sputtRefDistIn, nA_sputtRefDistIn,
-      Elog_sputtRefDistIn.data(), A_sputtRefDistIn.data(),
-      E_sputtRefDistOut.data(), E_sputtRefDistOutRef.data(),
-      Aphi_sputtRefDistOut.data(), energyDistGrid01.data(),
-      energyDistGrid01Ref.data(), angleDistGrid01.data(),
-      EDist_CDF_Y_regrid.data(), AphiDist_CDF_Y_regrid.data(),
-      EDist_CDF_R_regrid.data(), AphiDist_CDF_R_regrid.data(), nEdist, E0dist,
-      Edist, nAdist, A0dist, Adist, flux_ea, use_3d_geom, cylsymm );
+  reflection reflection0( particleArray, dt, &state1.front(), nLines, &boundaries[0], surfaces, flux_ea, use_3d_geom, cylsymm );
 
   history history0(particleArray, dev_tt, nT, subSampleFac, nP,
                    &positionHistoryX.front(), &positionHistoryY.front(),
@@ -3095,7 +2812,149 @@ if( presheath_interp == 1 )
                    &weightHistory.front());
 
 
-//// AD: FIXME  add force_eval later ////
+if( force_eval > 0 )
+  {
+  if (world_rank == 0) {
+    int nR_force, nZ_force;
+    gitr_precision forceX0, forceX1, forceZ0, forceZ1, testEnergy;
+    std::string forceCfg = "forceEvaluation.";
+
+    getVariable(cfg, forceCfg + "nR", nR_force);
+    getVariable(cfg, forceCfg + "nZ", nZ_force);
+    std::vector<gitr_precision> forceR(nR_force, 0.0), forceZ(nZ_force, 0.0);
+    std::vector<gitr_precision> tIon(nR_force * nZ_force, 0.0),
+        tRecomb(nR_force * nZ_force, 0.0);
+    std::vector<gitr_precision> dvEr(nR_force * nZ_force, 0.0),
+        dvEz(nR_force * nZ_force, 0.0), dvEt(nR_force * nZ_force, 0.0);
+    std::vector<gitr_precision> dvBr(nR_force * nZ_force, 0.0),
+        dvBz(nR_force * nZ_force, 0.0), dvBt(nR_force * nZ_force, 0.0);
+    std::vector<gitr_precision> dvCollr(nR_force * nZ_force, 0.0),
+        dvCollz(nR_force * nZ_force, 0.0), dvCollt(nR_force * nZ_force, 0.0);
+    std::vector<gitr_precision> dvITGr(nR_force * nZ_force, 0.0),
+        dvITGz(nR_force * nZ_force, 0.0), dvITGt(nR_force * nZ_force, 0.0);
+    std::vector<gitr_precision> dvETGr(nR_force * nZ_force, 0.0),
+        dvETGz(nR_force * nZ_force, 0.0), dvETGt(nR_force * nZ_force, 0.0);
+    getVariable(cfg, forceCfg + "X0", forceX0);
+    getVariable(cfg, forceCfg + "X1", forceX1);
+    getVariable(cfg, forceCfg + "Z0", forceZ0);
+    getVariable(cfg, forceCfg + "Z1", forceZ1);
+    getVariable(cfg, forceCfg + "particleEnergy", testEnergy);
+    for (int i = 0; i < nR_force; i++) {
+      forceR[i] = forceX0 + (forceX1 - forceX0) * i / (nR_force - 1);
+    }
+    for (int i = 0; i < nZ_force; i++) {
+      forceZ[i] = forceZ0 + (forceZ1 - forceZ0) * i / (nZ_force - 1);
+    }
+    gitr_precision Btotal = 0.0;
+    for (int i = 0; i < nR_force; i++) {
+      for (int j = 0; j < nZ_force; j++) {
+        interp2dVector(&Btest[0], forceR[i], 0.0, forceZ[j], nR_Bfield,
+                       nZ_Bfield, bfieldGridr.data(), bfieldGridz.data(),
+                       br.data(), bz.data(), by.data(), cylsymm );
+        Btotal = vectorNorm(Btest);
+        gitr_precision testTi =
+            interp2dCombined(0.0, 0.1, 0.0, nR_Temp, nZ_Temp, TempGridr.data(),
+                             TempGridz.data(), ti.data(), cylsymm );
+        particleArray->setParticle(0, forceR[i], 0.0, forceZ[j], testTi, 0.0,
+                                   0.0, pZ[0], pamu[0], pcharge[0] + 1.0);
+        move_boris0(0);
+
+        if( ionization > 0 )
+        {
+          thrust::for_each(thrust::device,particleBegin,particleBegin,ionize0);
+	        thrust::for_each(thrust::device,particleBegin,particleBegin,recombine0);
+        }
+
+        if( coulomb_collisions > 0 )
+        {
+        thrust::for_each(thrust::device,particleBegin,particleBegin,coulombCollisions0);
+        }
+
+        if( thermal_force > 0 )
+        {
+        thrust::for_each(thrust::device,particleBegin,particleBegin,thermalForce0);
+        }
+        dvEr[j * nR_force + i] = move_boris0.electricForce[0];
+        dvEz[j * nR_force + i] = move_boris0.electricForce[2];
+        dvEt[j * nR_force + i] = move_boris0.electricForce[1];
+        dvBr[j * nR_force + i] = move_boris0.magneticForce[0];
+        dvBz[j * nR_force + i] = move_boris0.magneticForce[2];
+        dvBt[j * nR_force + i] = move_boris0.magneticForce[1];
+
+        if( ionization > 0 )
+        {
+          tIon[j * nR_force + i] = ionize0.tion;
+          tRecomb[j * nR_force + i] = recombine0.tion;
+        }
+
+        if( coulomb_collisions > 0 )
+        {
+        dvCollr[j * nR_force + i] = coulombCollisions0.dv[0];
+        dvCollz[j * nR_force + i] = coulombCollisions0.dv[2];
+        dvCollt[j * nR_force + i] = coulombCollisions0.dv[1];
+        }
+        if( thermal_force > 0 )
+        {
+        dvITGr[j * nR_force + i] = thermalForce0.dv_ITGx;
+        dvITGz[j * nR_force + i] = thermalForce0.dv_ITGz;
+        dvITGt[j * nR_force + i] = thermalForce0.dv_ITGy;
+        dvETGr[j * nR_force + i] = thermalForce0.dv_ETGx;
+        dvETGz[j * nR_force + i] = thermalForce0.dv_ETGz;
+        dvETGt[j * nR_force + i] = thermalForce0.dv_ETGy;
+        }
+      }
+    }
+    std::cout << " about to write ncFile_forces " << std::endl;
+    netCDF::NcFile ncFile_force("output/forces.nc", netCDF::NcFile::replace);
+    netCDF::NcDim nc_nRf = ncFile_force.addDim("nR", nR_force);
+    netCDF::NcDim nc_nZf = ncFile_force.addDim("nZ", nZ_force);
+    vector<netCDF::NcDim> forceDims;
+    forceDims.push_back(nc_nZf);
+    forceDims.push_back(nc_nRf);
+    netCDF::NcVar forceRf = ncFile_force.addVar("r", netcdf_precision, nc_nRf);
+    netCDF::NcVar forceZf = ncFile_force.addVar("z", netcdf_precision, nc_nZf);
+    netCDF::NcVar nction = ncFile_force.addVar("tIon", netcdf_precision, forceDims);
+    netCDF::NcVar nctrec = ncFile_force.addVar("tRec", netcdf_precision, forceDims);
+    netCDF::NcVar dvErf = ncFile_force.addVar("dvEr", netcdf_precision, forceDims);
+    netCDF::NcVar dvEzf = ncFile_force.addVar("dvEz", netcdf_precision, forceDims);
+    netCDF::NcVar dvEtf = ncFile_force.addVar("dvEt", netcdf_precision, forceDims);
+    netCDF::NcVar dvBrf = ncFile_force.addVar("dvBr", netcdf_precision, forceDims);
+    netCDF::NcVar dvBzf = ncFile_force.addVar("dvBz", netcdf_precision, forceDims);
+    netCDF::NcVar dvBtf = ncFile_force.addVar("dvBt", netcdf_precision, forceDims);
+    netCDF::NcVar dvCollrf = ncFile_force.addVar("dvCollr", netcdf_precision, forceDims);
+    netCDF::NcVar dvCollzf = ncFile_force.addVar("dvCollz", netcdf_precision, forceDims);
+    netCDF::NcVar dvColltf = ncFile_force.addVar("dvCollt", netcdf_precision, forceDims);
+    netCDF::NcVar dvITGrf = ncFile_force.addVar("dvITGr", netcdf_precision, forceDims);
+    netCDF::NcVar dvITGzf = ncFile_force.addVar("dvITGz", netcdf_precision, forceDims);
+    netCDF::NcVar dvITGtf = ncFile_force.addVar("dvITGt", netcdf_precision, forceDims);
+    netCDF::NcVar dvETGrf = ncFile_force.addVar("dvETGr", netcdf_precision, forceDims);
+    netCDF::NcVar dvETGzf = ncFile_force.addVar("dvETGz", netcdf_precision, forceDims);
+    netCDF::NcVar dvETGtf = ncFile_force.addVar("dvETGt", netcdf_precision, forceDims);
+    forceRf.putVar(&forceR[0]);
+    forceZf.putVar(&forceZ[0]);
+    nction.putVar(&tIon[0]);
+    nctrec.putVar(&tRecomb[0]);
+    dvErf.putVar(&dvEr[0]);
+    dvEzf.putVar(&dvEz[0]);
+    dvEtf.putVar(&dvEt[0]);
+    dvBrf.putVar(&dvBr[0]);
+    dvBzf.putVar(&dvBz[0]);
+    dvBtf.putVar(&dvBt[0]);
+    dvCollrf.putVar(&dvCollr[0]);
+    dvCollzf.putVar(&dvCollz[0]);
+    dvColltf.putVar(&dvCollt[0]);
+    dvITGrf.putVar(&dvITGr[0]);
+    dvITGzf.putVar(&dvITGz[0]);
+    dvITGtf.putVar(&dvITGt[0]);
+    dvETGrf.putVar(&dvETGr[0]);
+    dvETGzf.putVar(&dvETGz[0]);
+    dvETGtf.putVar(&dvETGt[0]);
+    ncFile_force.close();
+    particleArray->setParticleV(0, px[0], py[0], pz[0], pvx[0], pvy[0], pvz[0],
+                                pZ[0], pamu[0], pcharge[0], dt);
+  }
+}
+
 
   auto start_clock = gitr_time::now();
   std::chrono::duration<gitr_precision> fs1 = start_clock - gitr_start_clock;
@@ -3220,11 +3079,6 @@ if( presheath_interp == 1 )
     }
 
 
-/////////////////////////////////
-/////////////////////////////////
-/////////////////////////////////
-/////////////////////////////////
-
   // Ensure that all time step loop GPU kernels are complete before proceeding
 #ifdef __CUDACC__
   cudaDeviceSynchronize();
@@ -3233,579 +3087,648 @@ if( presheath_interp == 1 )
   std::chrono::duration<gitr_precision> fs = finish_clock - start_clock;
   printf("Time taken          is %6.3f (secs) \n", fs.count());
   printf("Time taken per step is %6.3f (secs) \n", fs.count() / (gitr_precision)nT);
-  // float tmp202 =0.0;
-#if USE_CUDA
-  cudaDeviceSynchronize();
-#endif
-#if USE_MPI > 0
-// show memory usage of GPU
-#if USE_CUDA
-  if (world_rank == 0) {
-    size_t free_byte;
-    size_t total_byte;
-    cudaError_t cuda_status = cudaMemGetInfo(&free_byte, &total_byte);
 
-    if (cudaSuccess != cuda_status) {
-
-      printf("Error: cudaMemGetInfo fails, %s \n",
-             cudaGetErrorString(cuda_status));
-      exit(1);
-    }
-
-    double free_db = (double)free_byte;
-    double total_db = (double)total_byte;
-    double used_db = total_db - free_db;
-
-    printf("GPU memory usage: used = %f, free = %f MB, total = %f MB\n",
-           used_db / 1024.0 / 1024.0, free_db / 1024.0 / 1024.0,
-           total_db / 1024.0 / 1024.0);
-    int nDevices;
-    int nThreads;
-    cudaGetDeviceCount(&nDevices);
-    std::cout << "number of devices gotten " << nDevices << std::endl;
-    for (int i = 0; i < nDevices; i++) {
-      cudaDeviceProp prop;
-      cudaGetDeviceProperties(&prop, i);
-      printf("Device Number: %d\n", i);
-      printf("  Device name: %s\n", prop.name);
-      printf("  Memory Clock Rate (KHz): %d\n", prop.memoryClockRate);
-      printf("  Memory Bus Width (bits): %d\n", prop.memoryBusWidth);
-      printf("  Peak Memory Bandwidth (GB/s): %f\n\n",
-             2.0 * prop.memoryClockRate * (prop.memoryBusWidth / 8) / 1.0e6);
-      printf("  Total number of threads: %d\n",
-             prop.maxThreadsPerMultiProcessor);
-      nThreads = prop.maxThreadsPerMultiProcessor;
-    }
-  }
-#endif
-  std::cout << "reached gather initialization " << nP << std::endl;
-  sim::Array<gitr_precision> xGather(nP, 0.0);
-  sim::Array<gitr_precision> test0Gather(nP, 0.0);
-  sim::Array<gitr_precision> test1Gather(nP, 0.0);
-  sim::Array<gitr_precision> yGather(nP, 0.0);
-  sim::Array<gitr_precision> zGather(nP, 0.0);
-  sim::Array<gitr_precision> vGather(nP, 0.0);
-  sim::Array<gitr_precision> vxGather(nP, 0.0);
-  sim::Array<gitr_precision> vyGather(nP, 0.0);
-  sim::Array<gitr_precision> vzGather(nP, 0.0);
-  sim::Array<gitr_precision> hitWallGather(nP, 0.0);
-  sim::Array<int> surfaceHitGather(nP, 0.0);
-  sim::Array<gitr_precision> weightGather(nP, 0.0);
-  sim::Array<gitr_precision> chargeGather(nP, 0.0);
-  sim::Array<gitr_precision> firstIonizationTGather(nP, 0.0);
-  sim::Array<gitr_precision> firstIonizationZGather(nP, 0.0);
-  sim::Array<int> hasLeakedGather(nP, 0);
-
-  std::cout << "Reached MPI barrier for gather" << std::endl;
-  std::cout << "gather pstart and npperrank " << pStartIndx[world_rank] << " " << nPPerRank[world_rank] << std::endl;
-  MPI_Barrier(MPI_COMM_WORLD);
-  MPI_Gather(&particleArray->x[pStartIndx[world_rank]],nPPerRank[world_rank],
-             MPI_FLOAT, &xGather[0], nPPerRank[world_rank], MPI_FLOAT, 0,
-             MPI_COMM_WORLD);
-  std::cout << "Passed x"<< world_rank << std::endl;
-  MPI_Gather(&particleArray->y[world_rank * nP / world_size], nP / world_size,
-             MPI_FLOAT, &yGather[0], nP / world_size, MPI_FLOAT, 0,
-             MPI_COMM_WORLD);
-  MPI_Gather(&particleArray->z[world_rank * nP / world_size], nP / world_size,
-             MPI_FLOAT, &zGather[0], nP / world_size, MPI_FLOAT, 0,
-             MPI_COMM_WORLD);
-  MPI_Gather(&particleArray->v[world_rank * nP / world_size], nP / world_size,
-             MPI_FLOAT, &vGather[0], nP / world_size, MPI_FLOAT, 0,
-             MPI_COMM_WORLD);
-  MPI_Gather(&particleArray->vx[world_rank * nP / world_size], nP / world_size,
-             MPI_FLOAT, &vxGather[0], nP / world_size, MPI_FLOAT, 0,
-             MPI_COMM_WORLD);
-  MPI_Gather(&particleArray->vy[world_rank * nP / world_size], nP / world_size,
-             MPI_FLOAT, &vyGather[0], nP / world_size, MPI_FLOAT, 0,
-             MPI_COMM_WORLD);
-  MPI_Gather(&particleArray->vz[world_rank * nP / world_size], nP / world_size,
-             MPI_FLOAT, &vzGather[0], nP / world_size, MPI_FLOAT, 0,
-             MPI_COMM_WORLD);
-  MPI_Gather(&particleArray->hitWall[world_rank * nP / world_size],
-             nP / world_size, MPI_FLOAT, &hitWallGather[0], nP / world_size,
-             MPI_FLOAT, 0, MPI_COMM_WORLD);
-  MPI_Gather(&particleArray->hitWall[world_rank * nP / world_size],
-             nP / world_size, MPI_FLOAT, &surfaceHitGather[0], nP / world_size,
-             MPI_INT, 0, MPI_COMM_WORLD);
-  MPI_Gather(&particleArray->weight[world_rank * nP / world_size],
-             nP / world_size, MPI_FLOAT, &weightGather[0], nP / world_size,
-             MPI_FLOAT, 0, MPI_COMM_WORLD);
-  MPI_Gather(&particleArray->charge[world_rank * nP / world_size],
-             nP / world_size, MPI_FLOAT, &chargeGather[0], nP / world_size,
-             MPI_FLOAT, 0, MPI_COMM_WORLD);
-  MPI_Gather(&particleArray->hasLeaked[world_rank * nP / world_size],
-             nP / world_size, MPI_INT, &hasLeakedGather[0], nP / world_size,
-             MPI_INT, 0, MPI_COMM_WORLD);
-  MPI_Gather(&particleArray->firstIonizationT[world_rank * nP / world_size],
-             nP / world_size, MPI_FLOAT, &firstIonizationTGather[0],
-             nP / world_size, MPI_FLOAT, 0, MPI_COMM_WORLD);
-  MPI_Gather(&particleArray->firstIonizationZ[world_rank * nP / world_size],
-             nP / world_size, MPI_FLOAT, &firstIonizationZGather[0],
-             nP / world_size, MPI_FLOAT, 0, MPI_COMM_WORLD);
-  MPI_Gather(&particleArray->test0[world_rank * nP / world_size],
-             nP / world_size, MPI_FLOAT, &test0Gather[0], nP / world_size,
-             MPI_FLOAT, 0, MPI_COMM_WORLD);
-  MPI_Gather(&particleArray->test1[world_rank * nP / world_size],
-             nP / world_size, MPI_FLOAT, &test1Gather[0], nP / world_size,
-             MPI_FLOAT, 0, MPI_COMM_WORLD);
-  MPI_Barrier(MPI_COMM_WORLD);
-
-  if( particle_tracks > 0 )
-  {
-
-  std::vector<gitr_precision> exampleArray(4, 0.0);
-  std::vector<gitr_precision> exampleArrayGather(4, 0.0);
-  if (world_rank == 0) {
-    exampleArray[0] = 1;
-    exampleArray[1] = 1;
-  }
-  if (world_rank == 1) {
-    exampleArray[2] = 2;
-    exampleArray[3] = 2;
-  }
-  std::vector<int> exCount(2, 2), exDispl(2, 0);
-  exDispl[0] = 0;
-  exDispl[1] = 2;
-  const int *exdispl = &exDispl[0];
-  const int *excount = &exCount[0];
-
-  MPI_Barrier(MPI_COMM_WORLD);
-  MPI_Gatherv(&positionHistoryX[pDisplacement[world_rank]],
-              pHistPerNode[world_rank], MPI_FLOAT, &positionHistoryXgather[0],
-              phpn, displ, MPI_FLOAT, 0, MPI_COMM_WORLD);
-  MPI_Gatherv(&positionHistoryY[pDisplacement[world_rank]],
-              pHistPerNode[world_rank], MPI_FLOAT, &positionHistoryYgather[0],
-              phpn, displ, MPI_FLOAT, 0, MPI_COMM_WORLD);
-  MPI_Gatherv(&positionHistoryZ[pDisplacement[world_rank]],
-              pHistPerNode[world_rank], MPI_FLOAT, &positionHistoryZgather[0],
-              phpn, displ, MPI_FLOAT, 0, MPI_COMM_WORLD);
-  MPI_Gatherv(&velocityHistory[pStartIndx[world_rank] * nHistoriesPerParticle],
-              nPPerRank[world_rank] * nHistoriesPerParticle, MPI_FLOAT,
-              &velocityHistorygather[0], phpn, displ, MPI_FLOAT, 0,
-              MPI_COMM_WORLD);
-  MPI_Gatherv(&velocityHistoryX[pStartIndx[world_rank] * nHistoriesPerParticle],
-              nPPerRank[world_rank] * nHistoriesPerParticle, MPI_FLOAT,
-              &velocityHistoryXgather[0], phpn, displ, MPI_FLOAT, 0,
-              MPI_COMM_WORLD);
-  MPI_Gatherv(&velocityHistoryY[pStartIndx[world_rank] * nHistoriesPerParticle],
-              nPPerRank[world_rank] * nHistoriesPerParticle, MPI_FLOAT,
-              &velocityHistoryYgather[0], phpn, displ, MPI_FLOAT, 0,
-              MPI_COMM_WORLD);
-  MPI_Gatherv(&velocityHistoryZ[pStartIndx[world_rank] * nHistoriesPerParticle],
-              nPPerRank[world_rank] * nHistoriesPerParticle, MPI_FLOAT,
-              &velocityHistoryZgather[0], phpn, displ, MPI_FLOAT, 0,
-              MPI_COMM_WORLD);
-  MPI_Gatherv(&chargeHistory[pStartIndx[world_rank] * nHistoriesPerParticle],
-              nPPerRank[world_rank] * nHistoriesPerParticle, MPI_FLOAT,
-              &chargeHistoryGather[0], phpn, displ, MPI_FLOAT, 0,
-              MPI_COMM_WORLD);
-  MPI_Gatherv(&weightHistory[pStartIndx[world_rank] * nHistoriesPerParticle],
-              nPPerRank[world_rank] * nHistoriesPerParticle, MPI_FLOAT,
-              &weightHistoryGather[0], phpn, displ, MPI_FLOAT, 0,
-              MPI_COMM_WORLD);
-  MPI_Barrier(MPI_COMM_WORLD);
+  // Get the number of unique species - each nuclear charge is a species
+  std::map<double, std::string> uniqueSpecies;
+  for (int i = 0; i < nP; i++) {
+      double charges = particleArray->Z[i];
+      std::string speciesNames = materialData[particleArray->Z[i]].name; 
+      uniqueSpecies[charges] = speciesNames; 
   }
 
-  if( spectroscopy > 0 )
-  {
-  MPI_Barrier(MPI_COMM_WORLD);
-  MPI_Reduce(&net_Bins[0], &net_BinsTotal[0], nSpec, MPI_DOUBLE, MPI_SUM, 0,
-             MPI_COMM_WORLD);
-  MPI_Barrier(MPI_COMM_WORLD);
-  }
-  
-  if( surface_model > 0 || flux_ea > 0 )
-  {
-  // MPI_Barrier(MPI_COMM_WORLD);
-  std::cout << "Starting surface reduce " << std::endl;
-  // for(int i=0;i<nSurfaces;i++) std::cout <<
-  // surfaces->grossDeposition[i]<<std::endl;
-  MPI_Reduce(&surfaces->grossDeposition[0], &grossDeposition[0], nSurfaces,
-             MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
-  // MPI_Barrier(MPI_COMM_WORLD);
-  MPI_Reduce(&surfaces->grossErosion[0], &grossErosion[0], nSurfaces, MPI_FLOAT,
-             MPI_SUM, 0, MPI_COMM_WORLD);
-  // MPI_Barrier(MPI_COMM_WORLD);
-  MPI_Reduce(&surfaces->sumWeightStrike[0], &sumWeightStrike[0], nSurfaces,
-             MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
-  // MPI_Barrier(MPI_COMM_WORLD);
-  MPI_Reduce(&surfaces->aveSputtYld[0], &aveSputtYld[0], nSurfaces, MPI_FLOAT,
-             MPI_SUM, 0, MPI_COMM_WORLD);
-  // MPI_Barrier(MPI_COMM_WORLD);
-  MPI_Reduce(&surfaces->sputtYldCount[0], &sputtYldCount[0], nSurfaces, MPI_INT,
-             MPI_SUM, 0, MPI_COMM_WORLD);
-  // MPI_Barrier(MPI_COMM_WORLD);
-  MPI_Reduce(&surfaces->sumParticlesStrike[0], &sumParticlesStrike[0],
-             nSurfaces, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
-  MPI_Reduce(&surfaces->energyDistribution[0], &energyDistribution[0],
-             nSurfaces * nEdist * nAdist, MPI_FLOAT, MPI_SUM, 0,
-             MPI_COMM_WORLD);
-  MPI_Reduce(&surfaces->sputtDistribution[0], &sputtDistribution[0],
-             nSurfaces * nEdist * nAdist, MPI_FLOAT, MPI_SUM, 0,
-             MPI_COMM_WORLD);
-  MPI_Reduce(&surfaces->reflDistribution[0], &reflDistribution[0],
-             nSurfaces * nEdist * nAdist, MPI_FLOAT, MPI_SUM, 0,
-             MPI_COMM_WORLD);
-  MPI_Barrier(MPI_COMM_WORLD);
-  std::cout << "Finished surface reduce " << std::endl;
-  }
-#endif
-  if (world_rank == 0) {
-    auto MPIfinish_clock = gitr_time::now();
-    std::chrono::duration<gitr_precision> fsmpi = MPIfinish_clock - finish_clock;
-    printf("Time taken for mpi reduction          is %6.3f (secs) \n",
-           fsmpi.count());
-  }
-#if USE_MPI > 0
-  if (world_rank == 0) {
-#endif
-    int totalHitWall = 0;
-    for (int i = 0; i < nP; i++) {
-      if (particleArray->hitWall[i] > 0.0)
-        totalHitWall++;
-    }
-    if( use_3d_geom > 0 )
-    {
-    gitr_precision meanTransitTime0 = 0.0;
-    meanTransitTime0 = meanTransitTime0 / nP;
-    int max_boundary = 0;
-    gitr_precision max_impacts = 0.0;
-    int max_boundary1 = 0;
-    gitr_precision max_impacts1 = 0.0;
-    gitr_precision *impacts = new gitr_precision[nLines];
-    gitr_precision *xOut = new gitr_precision[nP];
-    gitr_precision *redeposit = new gitr_precision[nLines];
-    gitr_precision *startingParticles = new gitr_precision[nLines];
-    gitr_precision *surfZ = new gitr_precision[nLines];
+  // Display number of unique species
+  std::cout << "Number of unique species: " << uniqueSpecies.size() << std::endl;
 
-    for (int i = 0; i < nLines; i++) {
-      impacts[i] = boundaries[i].impacts;
-      redeposit[i] = boundaries[i].redeposit;
-      startingParticles[i] = boundaries[i].startingParticles;
-      if (boundaries[i].impacts > max_impacts) {
-        max_impacts = boundaries[i].impacts;
-        max_boundary = i;
-      }
-      surfZ[i] = boundaries[i].Z;
-    }
+  // Iterate over the unique species and save the data
+  for (const auto& pair : uniqueSpecies) {
+    std::cout << "Unique charge: " << pair.first << ", Species Name: " << pair.second << std::endl;
 
-    for (int i = 0; i < nP; i++) {
-      xOut[i] = particleArray->x[i];
-    }
+    // // Assuming you want the filename to be based on the species name
+    // std::string filename = "output/surface." + pair.second + ".nc";
 
-/*
-sim::Array<float> tally00(nLines,0);
-for (int j=0; j<nP; j++)
-{
-    tally00[particleArray->wallHit[j]] = tally00[particleArray->wallHit[j]] + 1;
-}
+    // // Create and open a new NetCDF file
+    // netCDF::NcFile ncFile(filename, netCDF::NcFile::replace);
 
-std::cout << "bound 164p " << tally00[164] << std::endl;
-std::cout << "bound 255p " << tally00[255] << std::endl;
+    int nSpecies = uniqueSpecies.size();
 
-std::cout << "bound 164 " << boundaries[164].impacts << std::endl;
-std::cout << "bound 255 " << boundaries[255].impacts << std::endl;
-*/
-    }
-    else
-    {
-//#else
-  gitr_precision *impacts = new gitr_precision[nLines];
-  gitr_precision *startingParticles = new gitr_precision[nLines];
-  gitr_precision *surfZ = new gitr_precision[nLines];
-  // float* impactEnergy = new float[nLines*1000];
-  for (int i = 0; i < nLines; i++) {
-    impacts[i] = boundaries[i].impacts;
-    startingParticles[i] = boundaries[i].startingParticles;
-    surfZ[i] = boundaries[i].Z;
-  }
-//#endif
-    }
-    // add initial particle erosion to surface counting
-    int closestBoundaryIndex = 0;
-    int surfIndex = 0;
-    gitr_precision minDistance = 0.0;
-    gitr_precision thisE[3] = {0.0};
-    for (int j = 0; j < nP; j++) {
-      minDistance =
-          getE(px[j], py[j], pz[j], thisE, boundaries.data(), nLines,
-               nR_closeGeom_sheath, nY_closeGeom_sheath, nZ_closeGeom_sheath,
-               n_closeGeomElements_sheath, &closeGeomGridr_sheath.front(),
-               &closeGeomGridy_sheath.front(), &closeGeomGridz_sheath.front(),
-               &closeGeom_sheath.front(), closestBoundaryIndex, biased_surface,
-               use_3d_geom, geom_hash_sheath, cylsymm, sheath_model_type);
-      
-      if (boundaries[closestBoundaryIndex].Z > 0.0) {
-        surfIndex = boundaries[closestBoundaryIndex].surfaceNumber;
-        grossErosion[surfIndex] = grossErosion[surfIndex] + 1.0;
-      }
-    }
-    
-    ofstream outfile2;
-    outfile2.open("output/positions.m");
-    for (int i = 1; i < nP + 1; i++) {
-      outfile2 << "Pos( " << i << ",:) = [ ";
-      outfile2 << particleArray->x[i - 1] << " " << particleArray->y[i - 1]
-               << " " << particleArray->z[i - 1] << " ];" << std::endl;
-    }
-    outfile2.close();
+    // // Create dimensions
+    // netCDF::NcDim nc_nLines = ncFile.addDim("nSurfaces", nSurfaces);
+    // netCDF::NcDim nc_nSpecies = ncFile.addDim("nSpecies", nSpecies);
+    // netCDF::NcDim nc_nEnergies = ncFile.addDim("nEnergies", nEdist);
+    // netCDF::NcDim nc_nAngles = ncFile.addDim("nAngles", nAdist);
 
-    // Write netCDF output for positions
-    netCDF::NcFile ncFile0("output/positions.nc", netCDF::NcFile::replace);
-    netCDF::NcDim nc_nP0 = ncFile0.addDim("nP", nP);
-    vector<netCDF::NcDim> dims0;
-    dims0.push_back(nc_nP0);
+    // // Create and define variables
+    // std::vector<netCDF::NcDim> dims1 = {nc_nLines};
+    // std::vector<netCDF::NcDim> dimsSurfE = {nc_nLines, nc_nSpecies, nc_nEnergies, nc_nAngles};
 
-    netCDF::NcVar nc_x0 = ncFile0.addVar("x", netcdf_precision, dims0);
-    netCDF::NcVar nc_y0 = ncFile0.addVar("y", netcdf_precision, dims0);
-    netCDF::NcVar nc_z0 = ncFile0.addVar("z", netcdf_precision, dims0);
-    netCDF::NcVar nc_vx0 = ncFile0.addVar("vx", netcdf_precision, dims0);
-    netCDF::NcVar nc_vy0 = ncFile0.addVar("vy", netcdf_precision, dims0);
-    netCDF::NcVar nc_vz0 = ncFile0.addVar("vz", netcdf_precision, dims0);
-    netCDF::NcVar nc_trans0 = ncFile0.addVar("transitTime", netcdf_precision, dims0);
-    netCDF::NcVar nc_impact0 = ncFile0.addVar("hitWall", netcdf_precision, dims0);
-    netCDF::NcVar nc_surfHit0 = ncFile0.addVar("surfaceHit", netCDF::ncInt, dims0);
-    netCDF::NcVar nc_weight0 = ncFile0.addVar("weight", netcdf_precision, dims0);
-    netCDF::NcVar nc_charge0 = ncFile0.addVar("charge", netcdf_precision, dims0);
-    netCDF::NcVar nc_leak0 = ncFile0.addVar("hasLeaked", netCDF::ncInt, dims0);
-    netCDF::NcVar nc_dist0 = ncFile0.addVar("distTraveled", netcdf_precision, dims0);
-    netCDF::NcVar nc_time0 = ncFile0.addVar("time", netcdf_precision, dims0);
-    netCDF::NcVar nc_dt0 = ncFile0.addVar("dt", netcdf_precision, dims0);
-    // add mass and Z
-    netCDF::NcVar nc_mass0 = ncFile0.addVar("amu", netcdf_precision, dims0);
-    netCDF::NcVar nc_Z0 = ncFile0.addVar("Z", netcdf_precision, dims0);
-#if USE_MPI > 0
-    nc_x0.putVar(&xGather[0]);
-    nc_y0.putVar(&yGather[0]);
-    nc_z0.putVar(&zGather[0]);
-    nc_vx0.putVar(&vxGather[0]);
-    nc_vy0.putVar(&vyGather[0]);
-    nc_vz0.putVar(&vzGather[0]);
-    nc_trans0.putVar(&particleArray->transitTime[0]);
-    nc_impact0.putVar(&hitWallGather[0]);
-    nc_surfHit0.putVar(&surfaceHitGather[0]);
-    nc_weight0.putVar(&weightGather[0]);
-    nc_charge0.putVar(&chargeGather[0]);
-    nc_leak0.putVar(&hasLeakedGather[0]);
-#else
-  std::cout << "not using mpi output" << std::endl;
-  nc_x0.putVar(&particleArray->xprevious[0]);
-  nc_y0.putVar(&particleArray->yprevious[0]);
-  nc_z0.putVar(&particleArray->zprevious[0]);
-  nc_vx0.putVar(&particleArray->vx[0]);
-  nc_vy0.putVar(&particleArray->vy[0]);
-  nc_vz0.putVar(&particleArray->vz[0]);
-  nc_trans0.putVar(&particleArray->transitTime[0]);
-  nc_impact0.putVar(&particleArray->hitWall[0]);
-  nc_surfHit0.putVar(&particleArray->surfaceHit[0]);
-  nc_weight0.putVar(&particleArray->weight[0]);
-  nc_charge0.putVar(&particleArray->charge[0]);
-  nc_leak0.putVar(&particleArray->hasLeaked[0]);
-  nc_dist0.putVar(&particleArray->distTraveled[0]);
-  nc_time0.putVar(&particleArray->time[0]);
-  nc_dt0.putVar(&particleArray->dt[0]);
-  nc_mass0.putVar(&particleArray->amu[0]);
-  nc_Z0.putVar(&particleArray->Z[0]);
-#endif
-    ncFile0.close();
-  if( surface_model > 0 || flux_ea > 0 )
-  {
-#if USE_MPI > 0
+    // // Define variables
+    // netCDF::NcVar nc_grossDep = ncFile.addVar("grossDeposition", netcdf_precision, dims1);
+    // netCDF::NcVar nc_grossEro = ncFile.addVar("grossErosion", netcdf_precision, dimsSurfE);
+    // netCDF::NcVar nc_aveSpyl = ncFile.addVar("aveSpyl", netcdf_precision, dims1);
+    // netCDF::NcVar nc_spylCounts = ncFile.addVar("spylCounts", netCDF::ncInt, dims1);
+    // netCDF::NcVar nc_surfNum = ncFile.addVar("surfaceNumber", netCDF::ncInt, dims1);
+    // netCDF::NcVar nc_sumParticlesStrike = ncFile.addVar("sumParticlesStrike", netCDF::ncInt, dims1);
+    // netCDF::NcVar nc_sumWeightStrike = ncFile.addVar("sumWeightStrike", netcdf_precision, dims1);
+    // netCDF::NcVar nc_surfEDist = ncFile.addVar("surfEDist", netcdf_precision, dimsSurfE);
+    // netCDF::NcVar nc_surfReflDist = ncFile.addVar("surfReflDist", netcdf_precision, dimsSurfE);
+    // netCDF::NcVar nc_surfSputtDist = ncFile.addVar("surfSputtDist", netcdf_precision, dimsSurfE);
+
+    // Collect and manage the data
     std::vector<int> surfaceNumbers(nSurfaces, 0);
+    std::vector<std::vector<gitr_precision>> multiSpeciesGrossErosion(nSurfaces, std::vector<gitr_precision>(nSpecies, 0));
+
     int srf = 0;
     for (int i = 0; i < nLines; i++) {
-      if (boundaries[i].surface) {
-        surfaceNumbers[srf] = i;
+        if (boundaries[i].surface) {
+            surfaceNumbers[srf] = i;
+            for (int j = 0; j < nSpecies; j++) {
+                multiSpeciesGrossErosion[srf][j] = surfaces->grossErosion[srf] + multiSpeciesGrossErosion[srf][j];
+                printf(" erosion for species %i is %6.3f \n", j, multiSpeciesGrossErosion[srf][j]);
 
-        srf = srf + 1;
-      }
-    }
-    netCDF::NcFile ncFile1("output/surface.nc", netCDF::NcFile::replace);
-    netCDF::NcDim nc_nLines = ncFile1.addDim("nSurfaces", nSurfaces);
-    vector<netCDF::NcDim> dims1;
-    dims1.push_back(nc_nLines);
 
-    vector<netCDF::NcDim> dimsSurfE;
-    dimsSurfE.push_back(nc_nLines);
-    netCDF::NcDim nc_nEnergies = ncFile1.addDim("nEnergies", nEdist);
-    netCDF::NcDim nc_nAngles = ncFile1.addDim("nAngles", nAdist);
-    dimsSurfE.push_back(nc_nAngles);
-    dimsSurfE.push_back(nc_nEnergies);
-    netCDF::NcVar nc_grossDep = ncFile1.addVar("grossDeposition", netcdf_precision, nc_nLines);
-    netCDF::NcVar nc_grossEro = ncFile1.addVar("grossErosion", netcdf_precision, nc_nLines);
-    netCDF::NcVar nc_aveSpyl = ncFile1.addVar("aveSpyl", netcdf_precision, nc_nLines);
-    netCDF::NcVar nc_spylCounts = ncFile1.addVar("spylCounts", netCDF::ncInt, nc_nLines);
-    netCDF::NcVar nc_surfNum = ncFile1.addVar("surfaceNumber", netCDF::ncInt, nc_nLines);
-    netCDF::NcVar nc_sumParticlesStrike = ncFile1.addVar("sumParticlesStrike", netCDF::ncInt, nc_nLines);
-    netCDF::NcVar nc_sumWeightStrike = ncFile1.addVar("sumWeightStrike", netcdf_precision, nc_nLines);
-    nc_grossDep.putVar(&grossDeposition[0]);
-    nc_surfNum.putVar(&surfaceNumbers[0]);
-    nc_grossEro.putVar(&grossErosion[0]);
-    nc_aveSpyl.putVar(&aveSputtYld[0]);
-    nc_spylCounts.putVar(&sputtYldCount[0]);
-    nc_sumParticlesStrike.putVar(&sumParticlesStrike[0]);
-    nc_sumWeightStrike.putVar(&sumWeightStrike[0]);
-    netCDF::NcVar nc_surfEDist = ncFile1.addVar("surfEDist", netcdf_precision, dimsSurfE);
-    netCDF::NcVar nc_surfReflDist = ncFile1.addVar("surfReflDist", netcdf_precision, dimsSurfE);
-    netCDF::NcVar nc_surfSputtDist =  ncFile1.addVar("surfSputtDist", netcdf_precision, dimsSurfE);
-    nc_surfEDist.putVar(&energyDistribution[0]);
-    nc_surfReflDist.putVar(&reflDistribution[0]);
-    nc_surfSputtDist.putVar(&sputtDistribution[0]);
-    ncFile1.close();
-#else
-    std::vector<int> surfaceNumbers(nSurfaces, 0);
-    int srf = 0;
-    for (int i = 0; i < nLines; i++) {
-      if (boundaries[i].surface) {
-        surfaceNumbers[srf] = i;
-
-        surfaces->grossErosion[srf] = surfaces->grossErosion[srf] + grossErosion[srf];
-        srf = srf + 1;
-      }
+            }
+            srf++;
+        }
     }  
-    netCDF::NcFile ncFile1("output/surface.nc", netCDF::NcFile::replace);
-    netCDF::NcDim nc_nLines = ncFile1.addDim("nSurfaces", nSurfaces);
-    vector<netCDF::NcDim> dims1;
-    dims1.push_back(nc_nLines);
+    // // Write data to NetCDF file
+    // nc_grossDep.putVar(&surfaces->grossDeposition[0]);
+    // nc_surfNum.putVar(&surfaceNumbers[0]);
+    // nc_grossEro.putVar(&multiSpeciesGrossErosion[0][0]);
+    // nc_aveSpyl.putVar(&surfaces->aveSputtYld[0]);
+    // nc_spylCounts.putVar(&surfaces->sputtYldCount[0]);
+    // nc_sumParticlesStrike.putVar(&surfaces->sumParticlesStrike[0]);
+    // nc_sumWeightStrike.putVar(&surfaces->sumWeightStrike[0]);
+    // nc_surfEDist.putVar(&surfaces->energyDistribution[0]);
+    // nc_surfReflDist.putVar(&surfaces->reflDistribution[0]);
+    // nc_surfSputtDist.putVar(&surfaces->sputtDistribution[0]);
 
-    vector<netCDF::NcDim> dimsSurfE;
-    dimsSurfE.push_back(nc_nLines);
-    netCDF::NcDim nc_nEnergies = ncFile1.addDim("nEnergies", nEdist);
-    netCDF::NcDim nc_nAngles = ncFile1.addDim("nAngles", nAdist);
-    dimsSurfE.push_back(nc_nEnergies);
-    dimsSurfE.push_back(nc_nAngles);
-    netCDF::NcVar nc_grossDep = ncFile1.addVar("grossDeposition", netcdf_precision, nc_nLines);
-    netCDF::NcVar nc_grossEro = ncFile1.addVar("grossErosion", netcdf_precision, nc_nLines);
-    netCDF::NcVar nc_aveSpyl = ncFile1.addVar("aveSpyl", netcdf_precision, nc_nLines);
-    netCDF::NcVar nc_spylCounts = ncFile1.addVar("spylCounts", netCDF::ncInt, nc_nLines);
-    netCDF::NcVar nc_surfNum = ncFile1.addVar("surfaceNumber", netCDF::ncInt, nc_nLines);
-    netCDF::NcVar nc_sumParticlesStrike = ncFile1.addVar("sumParticlesStrike", netCDF::ncInt, nc_nLines);
-    netCDF::NcVar nc_sumWeightStrike = ncFile1.addVar("sumWeightStrike", netcdf_precision, nc_nLines);
-    nc_grossDep.putVar(&surfaces->grossDeposition[0]);
-    nc_surfNum.putVar(&surfaceNumbers[0]);
-    nc_grossEro.putVar(&surfaces->grossErosion[0]);
-    nc_aveSpyl.putVar(&surfaces->aveSputtYld[0]);
-    nc_spylCounts.putVar(&surfaces->sputtYldCount[0]);
-    nc_sumParticlesStrike.putVar(&surfaces->sumParticlesStrike[0]);
-    nc_sumWeightStrike.putVar(&surfaces->sumWeightStrike[0]);
-    netCDF::NcVar nc_surfEDist = ncFile1.addVar("surfEDist", netcdf_precision, dimsSurfE);
-    netCDF::NcVar nc_surfReflDist = ncFile1.addVar("surfReflDist", netcdf_precision, dimsSurfE);
-    netCDF::NcVar nc_surfSputtDist = ncFile1.addVar("surfSputtDist", netcdf_precision, dimsSurfE);
-    nc_surfEDist.putVar(&surfaces->energyDistribution[0]);
-    nc_surfReflDist.putVar(&surfaces->reflDistribution[0]);
-    nc_surfSputtDist.putVar(&surfaces->sputtDistribution[0]);
-    ncFile1.close();
+    // // Close the file
+    // ncFile.close();
   }
-#endif
-  if( particle_tracks > 0 )
-  {
-    // Write netCDF output for histories
-    netCDF::NcFile ncFile_hist("output/history.nc", netCDF::NcFile::replace);
-    netCDF::NcDim nc_nT = ncFile_hist.addDim("nT", nHistoriesPerParticle);
-    netCDF::NcDim nc_nP = ncFile_hist.addDim("nP", nP);
-    vector<netCDF::NcDim> dims_hist;
-    dims_hist.push_back(nc_nP);
-    dims_hist.push_back(nc_nT);
-    netCDF::NcVar nc_x = ncFile_hist.addVar("x", netCDF::ncDouble, dims_hist);
-    netCDF::NcVar nc_y = ncFile_hist.addVar("y", netCDF::ncDouble, dims_hist);
-    netCDF::NcVar nc_z = ncFile_hist.addVar("z", netCDF::ncDouble, dims_hist);
 
-    netCDF::NcVar nc_v = ncFile_hist.addVar("v", netCDF::ncDouble, dims_hist);
-    netCDF::NcVar nc_vx = ncFile_hist.addVar("vx", netCDF::ncDouble, dims_hist);
-    netCDF::NcVar nc_vy = ncFile_hist.addVar("vy", netCDF::ncDouble, dims_hist);
-    netCDF::NcVar nc_vz = ncFile_hist.addVar("vz", netCDF::ncDouble, dims_hist);
+//   // float tmp202 =0.0;
+// #if USE_CUDA
+//   cudaDeviceSynchronize();
+// #endif
+// #if USE_MPI > 0
+// // show memory usage of GPU
+// #if USE_CUDA
+//   if (world_rank == 0) {
+//     size_t free_byte;
+//     size_t total_byte;
+//     cudaError_t cuda_status = cudaMemGetInfo(&free_byte, &total_byte);
 
-    netCDF::NcVar nc_charge = ncFile_hist.addVar("charge", netCDF::ncDouble, dims_hist);
-    netCDF::NcVar nc_weight = ncFile_hist.addVar("weight", netCDF::ncDouble, dims_hist);
-#if USE_MPI > 0
-    nc_x.putVar(&positionHistoryXgather[0]);
-    nc_y.putVar(&positionHistoryYgather[0]);
-    nc_z.putVar(&positionHistoryZgather[0]);
+//     if (cudaSuccess != cuda_status) {
 
-    nc_v.putVar(&velocityHistorygather[0]);
-    nc_vx.putVar(&velocityHistoryXgather[0]);
-    nc_vy.putVar(&velocityHistoryYgather[0]);
-    nc_vz.putVar(&velocityHistoryZgather[0]);
+//       printf("Error: cudaMemGetInfo fails, %s \n",
+//              cudaGetErrorString(cuda_status));
+//       exit(1);
+//     }
 
-    nc_charge.putVar(&chargeHistoryGather[0]);
-    nc_weight.putVar(&weightHistoryGather[0]);
-#else
-    nc_x.putVar(&positionHistoryX[0]);
-    nc_y.putVar(&positionHistoryY[0]);
-    nc_z.putVar(&positionHistoryZ[0]);
+//     double free_db = (double)free_byte;
+//     double total_db = (double)total_byte;
+//     double used_db = total_db - free_db;
 
-    nc_vx.putVar(&velocityHistoryX[0]);
-    nc_vy.putVar(&velocityHistoryY[0]);
-    nc_vz.putVar(&velocityHistoryZ[0]);
+//     printf("GPU memory usage: used = %f, free = %f MB, total = %f MB\n",
+//            used_db / 1024.0 / 1024.0, free_db / 1024.0 / 1024.0,
+//            total_db / 1024.0 / 1024.0);
+//     int nDevices;
+//     int nThreads;
+//     cudaGetDeviceCount(&nDevices);
+//     std::cout << "number of devices gotten " << nDevices << std::endl;
+//     for (int i = 0; i < nDevices; i++) {
+//       cudaDeviceProp prop;
+//       cudaGetDeviceProperties(&prop, i);
+//       printf("Device Number: %d\n", i);
+//       printf("  Device name: %s\n", prop.name);
+//       printf("  Memory Clock Rate (KHz): %d\n", prop.memoryClockRate);
+//       printf("  Memory Bus Width (bits): %d\n", prop.memoryBusWidth);
+//       printf("  Peak Memory Bandwidth (GB/s): %f\n\n",
+//              2.0 * prop.memoryClockRate * (prop.memoryBusWidth / 8) / 1.0e6);
+//       printf("  Total number of threads: %d\n",
+//              prop.maxThreadsPerMultiProcessor);
+//       nThreads = prop.maxThreadsPerMultiProcessor;
+//     }
+//   }
+// #endif
+//   std::cout << "reached gather initialization " << nP << std::endl;
+//   sim::Array<gitr_precision> xGather(nP, 0.0);
+//   sim::Array<gitr_precision> test0Gather(nP, 0.0);
+//   sim::Array<gitr_precision> test1Gather(nP, 0.0);
+//   sim::Array<gitr_precision> yGather(nP, 0.0);
+//   sim::Array<gitr_precision> zGather(nP, 0.0);
+//   sim::Array<gitr_precision> vGather(nP, 0.0);
+//   sim::Array<gitr_precision> vxGather(nP, 0.0);
+//   sim::Array<gitr_precision> vyGather(nP, 0.0);
+//   sim::Array<gitr_precision> vzGather(nP, 0.0);
+//   sim::Array<gitr_precision> hitWallGather(nP, 0.0);
+//   sim::Array<int> surfaceHitGather(nP, 0.0);
+//   sim::Array<gitr_precision> weightGather(nP, 0.0);
+//   sim::Array<gitr_precision> chargeGather(nP, 0.0);
+//   sim::Array<gitr_precision> firstIonizationTGather(nP, 0.0);
+//   sim::Array<gitr_precision> firstIonizationZGather(nP, 0.0);
+//   sim::Array<int> hasLeakedGather(nP, 0);
 
-    nc_charge.putVar(&chargeHistory[0]);
-#endif
-    ncFile_hist.close();
-  }
-    if( spectroscopy > 0 )
-    {
-    // Write netCDF output for density data
-    netCDF::NcFile ncFile("output/spec.nc", netCDF::NcFile::replace);
-    netCDF::NcDim nc_nBins = ncFile.addDim("nBins", nBins + 1);
-    netCDF::NcDim nc_nR = ncFile.addDim("nR", net_nX);
-    netCDF::NcDim nc_nY;
-    if( spectroscopy > 2 )
-    {
-    nc_nY = ncFile.addDim("nY", net_nY);
-    }
+//   std::cout << "Reached MPI barrier for gather" << std::endl;
+//   std::cout << "gather pstart and npperrank " << pStartIndx[world_rank] << " " << nPPerRank[world_rank] << std::endl;
+//   MPI_Barrier(MPI_COMM_WORLD);
+//   MPI_Gather(&particleArray->x[pStartIndx[world_rank]],nPPerRank[world_rank],
+//              MPI_FLOAT, &xGather[0], nPPerRank[world_rank], MPI_FLOAT, 0,
+//              MPI_COMM_WORLD);
+//   std::cout << "Passed x"<< world_rank << std::endl;
+//   MPI_Gather(&particleArray->y[world_rank * nP / world_size], nP / world_size,
+//              MPI_FLOAT, &yGather[0], nP / world_size, MPI_FLOAT, 0,
+//              MPI_COMM_WORLD);
+//   MPI_Gather(&particleArray->z[world_rank * nP / world_size], nP / world_size,
+//              MPI_FLOAT, &zGather[0], nP / world_size, MPI_FLOAT, 0,
+//              MPI_COMM_WORLD);
+//   MPI_Gather(&particleArray->v[world_rank * nP / world_size], nP / world_size,
+//              MPI_FLOAT, &vGather[0], nP / world_size, MPI_FLOAT, 0,
+//              MPI_COMM_WORLD);
+//   MPI_Gather(&particleArray->vx[world_rank * nP / world_size], nP / world_size,
+//              MPI_FLOAT, &vxGather[0], nP / world_size, MPI_FLOAT, 0,
+//              MPI_COMM_WORLD);
+//   MPI_Gather(&particleArray->vy[world_rank * nP / world_size], nP / world_size,
+//              MPI_FLOAT, &vyGather[0], nP / world_size, MPI_FLOAT, 0,
+//              MPI_COMM_WORLD);
+//   MPI_Gather(&particleArray->vz[world_rank * nP / world_size], nP / world_size,
+//              MPI_FLOAT, &vzGather[0], nP / world_size, MPI_FLOAT, 0,
+//              MPI_COMM_WORLD);
+//   MPI_Gather(&particleArray->hitWall[world_rank * nP / world_size],
+//              nP / world_size, MPI_FLOAT, &hitWallGather[0], nP / world_size,
+//              MPI_FLOAT, 0, MPI_COMM_WORLD);
+//   MPI_Gather(&particleArray->hitWall[world_rank * nP / world_size],
+//              nP / world_size, MPI_FLOAT, &surfaceHitGather[0], nP / world_size,
+//              MPI_INT, 0, MPI_COMM_WORLD);
+//   MPI_Gather(&particleArray->weight[world_rank * nP / world_size],
+//              nP / world_size, MPI_FLOAT, &weightGather[0], nP / world_size,
+//              MPI_FLOAT, 0, MPI_COMM_WORLD);
+//   MPI_Gather(&particleArray->charge[world_rank * nP / world_size],
+//              nP / world_size, MPI_FLOAT, &chargeGather[0], nP / world_size,
+//              MPI_FLOAT, 0, MPI_COMM_WORLD);
+//   MPI_Gather(&particleArray->hasLeaked[world_rank * nP / world_size],
+//              nP / world_size, MPI_INT, &hasLeakedGather[0], nP / world_size,
+//              MPI_INT, 0, MPI_COMM_WORLD);
+//   MPI_Gather(&particleArray->firstIonizationT[world_rank * nP / world_size],
+//              nP / world_size, MPI_FLOAT, &firstIonizationTGather[0],
+//              nP / world_size, MPI_FLOAT, 0, MPI_COMM_WORLD);
+//   MPI_Gather(&particleArray->firstIonizationZ[world_rank * nP / world_size],
+//              nP / world_size, MPI_FLOAT, &firstIonizationZGather[0],
+//              nP / world_size, MPI_FLOAT, 0, MPI_COMM_WORLD);
+//   MPI_Gather(&particleArray->test0[world_rank * nP / world_size],
+//              nP / world_size, MPI_FLOAT, &test0Gather[0], nP / world_size,
+//              MPI_FLOAT, 0, MPI_COMM_WORLD);
+//   MPI_Gather(&particleArray->test1[world_rank * nP / world_size],
+//              nP / world_size, MPI_FLOAT, &test1Gather[0], nP / world_size,
+//              MPI_FLOAT, 0, MPI_COMM_WORLD);
+//   MPI_Barrier(MPI_COMM_WORLD);
 
-    netCDF::NcDim nc_nZ = ncFile.addDim("nZ", net_nZ);
-    vector<netCDF::NcDim> dims;
-    dims.push_back(nc_nBins);
-    dims.push_back(nc_nZ);
+//   if( particle_tracks > 0 )
+//   {
 
-    if( spectroscopy > 2 )
-    {
-    dims.push_back(nc_nY);
-    }
+//   std::vector<gitr_precision> exampleArray(4, 0.0);
+//   std::vector<gitr_precision> exampleArrayGather(4, 0.0);
+//   if (world_rank == 0) {
+//     exampleArray[0] = 1;
+//     exampleArray[1] = 1;
+//   }
+//   if (world_rank == 1) {
+//     exampleArray[2] = 2;
+//     exampleArray[3] = 2;
+//   }
+//   std::vector<int> exCount(2, 2), exDispl(2, 0);
+//   exDispl[0] = 0;
+//   exDispl[1] = 2;
+//   const int *exdispl = &exDispl[0];
+//   const int *excount = &exCount[0];
 
-    dims.push_back(nc_nR);
+//   MPI_Barrier(MPI_COMM_WORLD);
+//   MPI_Gatherv(&positionHistoryX[pDisplacement[world_rank]],
+//               pHistPerNode[world_rank], MPI_FLOAT, &positionHistoryXgather[0],
+//               phpn, displ, MPI_FLOAT, 0, MPI_COMM_WORLD);
+//   MPI_Gatherv(&positionHistoryY[pDisplacement[world_rank]],
+//               pHistPerNode[world_rank], MPI_FLOAT, &positionHistoryYgather[0],
+//               phpn, displ, MPI_FLOAT, 0, MPI_COMM_WORLD);
+//   MPI_Gatherv(&positionHistoryZ[pDisplacement[world_rank]],
+//               pHistPerNode[world_rank], MPI_FLOAT, &positionHistoryZgather[0],
+//               phpn, displ, MPI_FLOAT, 0, MPI_COMM_WORLD);
+//   MPI_Gatherv(&velocityHistory[pStartIndx[world_rank] * nHistoriesPerParticle],
+//               nPPerRank[world_rank] * nHistoriesPerParticle, MPI_FLOAT,
+//               &velocityHistorygather[0], phpn, displ, MPI_FLOAT, 0,
+//               MPI_COMM_WORLD);
+//   MPI_Gatherv(&velocityHistoryX[pStartIndx[world_rank] * nHistoriesPerParticle],
+//               nPPerRank[world_rank] * nHistoriesPerParticle, MPI_FLOAT,
+//               &velocityHistoryXgather[0], phpn, displ, MPI_FLOAT, 0,
+//               MPI_COMM_WORLD);
+//   MPI_Gatherv(&velocityHistoryY[pStartIndx[world_rank] * nHistoriesPerParticle],
+//               nPPerRank[world_rank] * nHistoriesPerParticle, MPI_FLOAT,
+//               &velocityHistoryYgather[0], phpn, displ, MPI_FLOAT, 0,
+//               MPI_COMM_WORLD);
+//   MPI_Gatherv(&velocityHistoryZ[pStartIndx[world_rank] * nHistoriesPerParticle],
+//               nPPerRank[world_rank] * nHistoriesPerParticle, MPI_FLOAT,
+//               &velocityHistoryZgather[0], phpn, displ, MPI_FLOAT, 0,
+//               MPI_COMM_WORLD);
+//   MPI_Gatherv(&chargeHistory[pStartIndx[world_rank] * nHistoriesPerParticle],
+//               nPPerRank[world_rank] * nHistoriesPerParticle, MPI_FLOAT,
+//               &chargeHistoryGather[0], phpn, displ, MPI_FLOAT, 0,
+//               MPI_COMM_WORLD);
+//   MPI_Gatherv(&weightHistory[pStartIndx[world_rank] * nHistoriesPerParticle],
+//               nPPerRank[world_rank] * nHistoriesPerParticle, MPI_FLOAT,
+//               &weightHistoryGather[0], phpn, displ, MPI_FLOAT, 0,
+//               MPI_COMM_WORLD);
+//   MPI_Barrier(MPI_COMM_WORLD);
+//   }
 
-    netCDF::NcVar nc_n = ncFile.addVar("n", netcdf_precision, dims);
-    netCDF::NcVar nc_gridR = ncFile.addVar("gridR", netcdf_precision, nc_nR);
-    netCDF::NcVar nc_gridZ = ncFile.addVar("gridZ", netcdf_precision, nc_nZ);
-    nc_gridR.putVar(&gridX_bins[0]);
-    nc_gridZ.putVar(&gridZ_bins[0]);
-    if( spectroscopy > 2 )
-    {
-    netCDF::NcVar nc_gridY = ncFile.addVar("gridY", netcdf_precision, nc_nY);
-    nc_gridY.putVar(&gridY_bins[0]);
-    }
+//   if( spectroscopy > 0 )
+//   {
+//   MPI_Barrier(MPI_COMM_WORLD);
+//   MPI_Reduce(&net_Bins[0], &net_BinsTotal[0], nSpec, MPI_DOUBLE, MPI_SUM, 0,
+//              MPI_COMM_WORLD);
+//   MPI_Barrier(MPI_COMM_WORLD);
+//   }
+  
+//   if( surface_model > 0 || flux_ea > 0 )
+//   {
+//   // MPI_Barrier(MPI_COMM_WORLD);
+//   std::cout << "Starting surface reduce " << std::endl;
+//   // for(int i=0;i<nSurfaces;i++) std::cout <<
+//   // surfaces->grossDeposition[i]<<std::endl;
+//   MPI_Reduce(&surfaces->grossDeposition[0], &grossDeposition[0], nSurfaces,
+//              MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
+//   // MPI_Barrier(MPI_COMM_WORLD);
+//   MPI_Reduce(&surfaces->grossErosion[0], &grossErosion[0], nSurfaces, MPI_FLOAT,
+//              MPI_SUM, 0, MPI_COMM_WORLD);
+//   // MPI_Barrier(MPI_COMM_WORLD);
+//   MPI_Reduce(&surfaces->sumWeightStrike[0], &sumWeightStrike[0], nSurfaces,
+//              MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
+//   // MPI_Barrier(MPI_COMM_WORLD);
+//   MPI_Reduce(&surfaces->aveSputtYld[0], &aveSputtYld[0], nSurfaces, MPI_FLOAT,
+//              MPI_SUM, 0, MPI_COMM_WORLD);
+//   // MPI_Barrier(MPI_COMM_WORLD);
+//   MPI_Reduce(&surfaces->sputtYldCount[0], &sputtYldCount[0], nSurfaces, MPI_INT,
+//              MPI_SUM, 0, MPI_COMM_WORLD);
+//   // MPI_Barrier(MPI_COMM_WORLD);
+//   MPI_Reduce(&surfaces->sumParticlesStrike[0], &sumParticlesStrike[0],
+//              nSurfaces, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+//   MPI_Reduce(&surfaces->energyDistribution[0], &energyDistribution[0],
+//              nSurfaces * nEdist * nAdist, MPI_FLOAT, MPI_SUM, 0,
+//              MPI_COMM_WORLD);
+//   MPI_Reduce(&surfaces->sputtDistribution[0], &sputtDistribution[0],
+//              nSurfaces * nEdist * nAdist, MPI_FLOAT, MPI_SUM, 0,
+//              MPI_COMM_WORLD);
+//   MPI_Reduce(&surfaces->reflDistribution[0], &reflDistribution[0],
+//              nSurfaces * nEdist * nAdist, MPI_FLOAT, MPI_SUM, 0,
+//              MPI_COMM_WORLD);
+//   MPI_Barrier(MPI_COMM_WORLD);
+//   std::cout << "Finished surface reduce " << std::endl;
+//   }
+// #endif
+//   if (world_rank == 0) {
+//     auto MPIfinish_clock = gitr_time::now();
+//     std::chrono::duration<gitr_precision> fsmpi = MPIfinish_clock - finish_clock;
+//     printf("Time taken for mpi reduction          is %6.3f (secs) \n",
+//            fsmpi.count());
+//   }
+// #if USE_MPI > 0
+//   if (world_rank == 0) {
+// #endif
+//     int totalHitWall = 0;
+//     for (int i = 0; i < nP; i++) {
+//       if (particleArray->hitWall[i] > 0.0)
+//         totalHitWall++;
+//     }
+//     if( use_3d_geom > 0 )
+//     {
+//     gitr_precision meanTransitTime0 = 0.0;
+//     meanTransitTime0 = meanTransitTime0 / nP;
+//     int max_boundary = 0;
+//     gitr_precision max_impacts = 0.0;
+//     int max_boundary1 = 0;
+//     gitr_precision max_impacts1 = 0.0;
+//     gitr_precision *impacts = new gitr_precision[nLines];
+//     gitr_precision *xOut = new gitr_precision[nP];
+//     gitr_precision *redeposit = new gitr_precision[nLines];
+//     gitr_precision *startingParticles = new gitr_precision[nLines];
+//     gitr_precision *surfZ = new gitr_precision[nLines];
 
-#if USE_MPI > 0
-    nc_n.putVar(&net_BinsTotal[0]);
-#else
-    nc_n.putVar(&net_Bins[0]);
-#endif
-    ncFile.close();
-    }
-#ifdef __CUDACC__
-    cudaDeviceSynchronize();
-#endif
-#if USE_MPI > 0
-#endif
-#if USE_MPI > 0
-  }
-#endif
-#ifdef __CUDACC__
-  cudaError_t err = cudaDeviceReset();
-// cudaProfilerStop();
-#endif
-  if (world_rank == 0) {
-    auto gitr_finish_clock = gitr_time::now();
-    std::chrono::duration<gitr_precision> fstotal = gitr_finish_clock - gitr_start_clock;
-    printf("Total runtime for GITR is %6.3f (secs) \n", fstotal.count());
-  }
-#if USE_MPI > 0
-  // Finalize the MPI environment.
-  MPI_Barrier(MPI_COMM_WORLD);
-  MPI_Finalize();
-#endif
+//     for (int i = 0; i < nLines; i++) {
+//       impacts[i] = boundaries[i].impacts;
+//       redeposit[i] = boundaries[i].redeposit;
+//       startingParticles[i] = boundaries[i].startingParticles;
+//       if (boundaries[i].impacts > max_impacts) {
+//         max_impacts = boundaries[i].impacts;
+//         max_boundary = i;
+//       }
+//       surfZ[i] = boundaries[i].Z;
+//     }
+
+//     for (int i = 0; i < nP; i++) {
+//       xOut[i] = particleArray->x[i];
+//     }
+
+//     }
+//     else
+//     {
+// //#else
+//   gitr_precision *impacts = new gitr_precision[nLines];
+//   gitr_precision *startingParticles = new gitr_precision[nLines];
+//   gitr_precision *surfZ = new gitr_precision[nLines];
+//   // float* impactEnergy = new float[nLines*1000];
+//   for (int i = 0; i < nLines; i++) {
+//     impacts[i] = boundaries[i].impacts;
+//     startingParticles[i] = boundaries[i].startingParticles;
+//     surfZ[i] = boundaries[i].Z;
+//   }
+// //#endif
+//     }
+//     // add initial particle erosion to surface counting
+//     int closestBoundaryIndex = 0;
+//     int surfIndex = 0;
+//     gitr_precision minDistance = 0.0;
+//     gitr_precision thisE[3] = {0.0};
+//     for (int j = 0; j < nP; j++) {
+//       minDistance =
+//           getE(px[j], py[j], pz[j], thisE, boundaries.data(), nLines,
+//                nR_closeGeom_sheath, nY_closeGeom_sheath, nZ_closeGeom_sheath,
+//                n_closeGeomElements_sheath, &closeGeomGridr_sheath.front(),
+//                &closeGeomGridy_sheath.front(), &closeGeomGridz_sheath.front(),
+//                &closeGeom_sheath.front(), closestBoundaryIndex, biased_surface,
+//                use_3d_geom, geom_hash_sheath, cylsymm, sheath_model_type);
+      
+//       if (boundaries[closestBoundaryIndex].Z > 0.0) {
+//         surfIndex = boundaries[closestBoundaryIndex].surfaceNumber;
+//         grossErosion[surfIndex] = grossErosion[surfIndex] + 1.0;
+//       }
+//     }
+    
+//     ofstream outfile2;
+//     outfile2.open("output/positions.m");
+//     for (int i = 1; i < nP + 1; i++) {
+//       outfile2 << "Pos( " << i << ",:) = [ ";
+//       outfile2 << particleArray->x[i - 1] << " " << particleArray->y[i - 1]
+//                << " " << particleArray->z[i - 1] << " ];" << std::endl;
+//     }
+//     outfile2.close();
+
+//     // Write netCDF output for positions
+//     netCDF::NcFile ncFile0("output/positions.nc", netCDF::NcFile::replace);
+//     netCDF::NcDim nc_nP0 = ncFile0.addDim("nP", nP);
+//     vector<netCDF::NcDim> dims0;
+//     dims0.push_back(nc_nP0);
+
+//     netCDF::NcVar nc_x0 = ncFile0.addVar("x", netcdf_precision, dims0);
+//     netCDF::NcVar nc_y0 = ncFile0.addVar("y", netcdf_precision, dims0);
+//     netCDF::NcVar nc_z0 = ncFile0.addVar("z", netcdf_precision, dims0);
+//     netCDF::NcVar nc_vx0 = ncFile0.addVar("vx", netcdf_precision, dims0);
+//     netCDF::NcVar nc_vy0 = ncFile0.addVar("vy", netcdf_precision, dims0);
+//     netCDF::NcVar nc_vz0 = ncFile0.addVar("vz", netcdf_precision, dims0);
+//     netCDF::NcVar nc_trans0 = ncFile0.addVar("transitTime", netcdf_precision, dims0);
+//     netCDF::NcVar nc_impact0 = ncFile0.addVar("hitWall", netcdf_precision, dims0);
+//     netCDF::NcVar nc_surfHit0 = ncFile0.addVar("surfaceHit", netCDF::ncInt, dims0);
+//     netCDF::NcVar nc_weight0 = ncFile0.addVar("weight", netcdf_precision, dims0);
+//     netCDF::NcVar nc_charge0 = ncFile0.addVar("charge", netcdf_precision, dims0);
+//     netCDF::NcVar nc_leak0 = ncFile0.addVar("hasLeaked", netCDF::ncInt, dims0);
+//     netCDF::NcVar nc_dist0 = ncFile0.addVar("distTraveled", netcdf_precision, dims0);
+//     netCDF::NcVar nc_time0 = ncFile0.addVar("time", netcdf_precision, dims0);
+//     netCDF::NcVar nc_dt0 = ncFile0.addVar("dt", netcdf_precision, dims0);
+//     // add mass and Z
+//     netCDF::NcVar nc_mass0 = ncFile0.addVar("amu", netcdf_precision, dims0);
+//     netCDF::NcVar nc_Z0 = ncFile0.addVar("Z", netcdf_precision, dims0);
+// #if USE_MPI > 0
+//     nc_x0.putVar(&xGather[0]);
+//     nc_y0.putVar(&yGather[0]);
+//     nc_z0.putVar(&zGather[0]);
+//     nc_vx0.putVar(&vxGather[0]);
+//     nc_vy0.putVar(&vyGather[0]);
+//     nc_vz0.putVar(&vzGather[0]);
+//     nc_trans0.putVar(&particleArray->transitTime[0]);
+//     nc_impact0.putVar(&hitWallGather[0]);
+//     nc_surfHit0.putVar(&surfaceHitGather[0]);
+//     nc_weight0.putVar(&weightGather[0]);
+//     nc_charge0.putVar(&chargeGather[0]);
+//     nc_leak0.putVar(&hasLeakedGather[0]);
+// #else
+//   std::cout << "not using mpi output" << std::endl;
+//   nc_x0.putVar(&particleArray->xprevious[0]);
+//   nc_y0.putVar(&particleArray->yprevious[0]);
+//   nc_z0.putVar(&particleArray->zprevious[0]);
+//   nc_vx0.putVar(&particleArray->vx[0]);
+//   nc_vy0.putVar(&particleArray->vy[0]);
+//   nc_vz0.putVar(&particleArray->vz[0]);
+//   nc_trans0.putVar(&particleArray->transitTime[0]);
+//   nc_impact0.putVar(&particleArray->hitWall[0]);
+//   nc_surfHit0.putVar(&particleArray->surfaceHit[0]);
+//   nc_weight0.putVar(&particleArray->weight[0]);
+//   nc_charge0.putVar(&particleArray->charge[0]);
+//   nc_leak0.putVar(&particleArray->hasLeaked[0]);
+//   nc_dist0.putVar(&particleArray->distTraveled[0]);
+//   nc_time0.putVar(&particleArray->time[0]);
+//   nc_dt0.putVar(&particleArray->dt[0]);
+//   nc_mass0.putVar(&particleArray->amu[0]);
+//   nc_Z0.putVar(&particleArray->Z[0]);
+// #endif
+//     ncFile0.close();
+//   if( surface_model > 0 || flux_ea > 0 )
+//   {
+// #if USE_MPI > 0
+//     std::vector<int> surfaceNumbers(nSurfaces, 0);
+//     int srf = 0;
+//     for (int i = 0; i < nLines; i++) {
+//       if (boundaries[i].surface) {
+//         surfaceNumbers[srf] = i;
+
+//         srf = srf + 1;
+//       }
+//     }
+//     netCDF::NcFile ncFile1("output/surface.nc", netCDF::NcFile::replace);
+//     netCDF::NcDim nc_nLines = ncFile1.addDim("nSurfaces", nSurfaces);
+//     vector<netCDF::NcDim> dims1;
+//     dims1.push_back(nc_nLines);
+
+//     // get species names
+
+//     vector<netCDF::NcDim> dimsSurfE;
+//     dimsSurfE.push_back(nc_nLines);
+//     netCDF::NcDim nc_nEnergies = ncFile1.addDim("nEnergies", nEdist);
+//     netCDF::NcDim nc_nAngles = ncFile1.addDim("nAngles", nAdist);
+//     dimsSurfE.push_back(nc_nAngles);
+//     dimsSurfE.push_back(nc_nEnergies);
+//     netCDF::NcVar nc_grossDep = ncFile1.addVar("grossDeposition", netcdf_precision, nc_nLines);
+//     netCDF::NcVar nc_grossEro = ncFile1.addVar("grossErosion", netcdf_precision, nc_nLines);
+//     netCDF::NcVar nc_aveSpyl = ncFile1.addVar("aveSpyl", netcdf_precision, nc_nLines);
+//     netCDF::NcVar nc_spylCounts = ncFile1.addVar("spylCounts", netCDF::ncInt, nc_nLines);
+//     netCDF::NcVar nc_surfNum = ncFile1.addVar("surfaceNumber", netCDF::ncInt, nc_nLines);
+//     netCDF::NcVar nc_sumParticlesStrike = ncFile1.addVar("sumParticlesStrike", netCDF::ncInt, nc_nLines);
+//     netCDF::NcVar nc_sumWeightStrike = ncFile1.addVar("sumWeightStrike", netcdf_precision, nc_nLines);
+//     nc_grossDep.putVar(&grossDeposition[0]);
+//     nc_surfNum.putVar(&surfaceNumbers[0]);
+//     nc_grossEro.putVar(&grossErosion[0]);
+//     nc_aveSpyl.putVar(&aveSputtYld[0]);
+//     nc_spylCounts.putVar(&sputtYldCount[0]);
+//     nc_sumParticlesStrike.putVar(&sumParticlesStrike[0]);
+//     nc_sumWeightStrike.putVar(&sumWeightStrike[0]);
+//     netCDF::NcVar nc_surfEDist = ncFile1.addVar("surfEDist", netcdf_precision, dimsSurfE);
+//     netCDF::NcVar nc_surfReflDist = ncFile1.addVar("surfReflDist", netcdf_precision, dimsSurfE);
+//     netCDF::NcVar nc_surfSputtDist =  ncFile1.addVar("surfSputtDist", netcdf_precision, dimsSurfE);
+//     nc_surfEDist.putVar(&energyDistribution[0]);
+//     nc_surfReflDist.putVar(&reflDistribution[0]);
+//     nc_surfSputtDist.putVar(&sputtDistribution[0]);
+//     ncFile1.close();
+// #else
+//     int nSpecies = 0;
+//     std::vector<int> surfaceNumbers(nSurfaces, 0);
+//     int srf = 0;
+//     for (int i = 0; i < nLines; i++) {
+//       if (boundaries[i].surface) {
+//         surfaceNumbers[srf] = i;
+
+//         surfaces->grossErosion[srf] = surfaces->grossErosion[srf] + grossErosion[srf];
+//         srf = srf + 1;
+//       }
+//     }  
+//     netCDF::NcFile ncFile1("output/surface.nc", netCDF::NcFile::replace);
+//     netCDF::NcDim nc_nLines = ncFile1.addDim("nSurfaces", nSurfaces);
+//     vector<netCDF::NcDim> dims1;
+//     dims1.push_back(nc_nLines);
+
+//     vector<netCDF::NcDim> dimsSurfE;
+//     dimsSurfE.push_back(nc_nLines);
+//     netCDF::NcDim nc_nEnergies = ncFile1.addDim("nEnergies", nEdist);
+//     netCDF::NcDim nc_nAngles = ncFile1.addDim("nAngles", nAdist);
+//     dimsSurfE.push_back(nc_nEnergies);
+//     dimsSurfE.push_back(nc_nAngles);
+//     netCDF::NcVar nc_grossDep = ncFile1.addVar("grossDeposition", netcdf_precision, nc_nLines);
+//     netCDF::NcVar nc_grossEro = ncFile1.addVar("grossErosion", netcdf_precision, nc_nLines);
+//     netCDF::NcVar nc_aveSpyl = ncFile1.addVar("aveSpyl", netcdf_precision, nc_nLines);
+//     netCDF::NcVar nc_spylCounts = ncFile1.addVar("spylCounts", netCDF::ncInt, nc_nLines);
+//     netCDF::NcVar nc_surfNum = ncFile1.addVar("surfaceNumber", netCDF::ncInt, nc_nLines);
+//     netCDF::NcVar nc_sumParticlesStrike = ncFile1.addVar("sumParticlesStrike", netCDF::ncInt, nc_nLines);
+//     netCDF::NcVar nc_sumWeightStrike = ncFile1.addVar("sumWeightStrike", netcdf_precision, nc_nLines);
+//     nc_grossDep.putVar(&surfaces->grossDeposition[0]);
+//     nc_surfNum.putVar(&surfaceNumbers[0]);
+//     nc_grossEro.putVar(&surfaces->grossErosion[0]);
+//     nc_aveSpyl.putVar(&surfaces->aveSputtYld[0]);
+//     nc_spylCounts.putVar(&surfaces->sputtYldCount[0]);
+//     nc_sumParticlesStrike.putVar(&surfaces->sumParticlesStrike[0]);
+//     nc_sumWeightStrike.putVar(&surfaces->sumWeightStrike[0]);
+//     netCDF::NcVar nc_surfEDist = ncFile1.addVar("surfEDist", netcdf_precision, dimsSurfE);
+//     netCDF::NcVar nc_surfReflDist = ncFile1.addVar("surfReflDist", netcdf_precision, dimsSurfE);
+//     netCDF::NcVar nc_surfSputtDist = ncFile1.addVar("surfSputtDist", netcdf_precision, dimsSurfE);
+//     nc_surfEDist.putVar(&surfaces->energyDistribution[0]);
+//     nc_surfReflDist.putVar(&surfaces->reflDistribution[0]);
+//     nc_surfSputtDist.putVar(&surfaces->sputtDistribution[0]);
+//     ncFile1.close();
+//   }
+// #endif
+//   if( particle_tracks > 0 )
+//   {
+//     // Write netCDF output for histories
+//     netCDF::NcFile ncFile_hist("output/history.nc", netCDF::NcFile::replace);
+//     netCDF::NcDim nc_nT = ncFile_hist.addDim("nT", nHistoriesPerParticle);
+//     netCDF::NcDim nc_nP = ncFile_hist.addDim("nP", nP);
+//     vector<netCDF::NcDim> dims_hist;
+//     dims_hist.push_back(nc_nP);
+//     dims_hist.push_back(nc_nT);
+//     netCDF::NcVar nc_x = ncFile_hist.addVar("x", netCDF::ncDouble, dims_hist);
+//     netCDF::NcVar nc_y = ncFile_hist.addVar("y", netCDF::ncDouble, dims_hist);
+//     netCDF::NcVar nc_z = ncFile_hist.addVar("z", netCDF::ncDouble, dims_hist);
+
+//     netCDF::NcVar nc_v = ncFile_hist.addVar("v", netCDF::ncDouble, dims_hist);
+//     netCDF::NcVar nc_vx = ncFile_hist.addVar("vx", netCDF::ncDouble, dims_hist);
+//     netCDF::NcVar nc_vy = ncFile_hist.addVar("vy", netCDF::ncDouble, dims_hist);
+//     netCDF::NcVar nc_vz = ncFile_hist.addVar("vz", netCDF::ncDouble, dims_hist);
+
+//     netCDF::NcVar nc_charge = ncFile_hist.addVar("charge", netCDF::ncDouble, dims_hist);
+//     netCDF::NcVar nc_weight = ncFile_hist.addVar("weight", netCDF::ncDouble, dims_hist);
+// #if USE_MPI > 0
+//     nc_x.putVar(&positionHistoryXgather[0]);
+//     nc_y.putVar(&positionHistoryYgather[0]);
+//     nc_z.putVar(&positionHistoryZgather[0]);
+
+//     nc_v.putVar(&velocityHistorygather[0]);
+//     nc_vx.putVar(&velocityHistoryXgather[0]);
+//     nc_vy.putVar(&velocityHistoryYgather[0]);
+//     nc_vz.putVar(&velocityHistoryZgather[0]);
+
+//     nc_charge.putVar(&chargeHistoryGather[0]);
+//     nc_weight.putVar(&weightHistoryGather[0]);
+// #else
+//     nc_x.putVar(&positionHistoryX[0]);
+//     nc_y.putVar(&positionHistoryY[0]);
+//     nc_z.putVar(&positionHistoryZ[0]);
+
+//     nc_vx.putVar(&velocityHistoryX[0]);
+//     nc_vy.putVar(&velocityHistoryY[0]);
+//     nc_vz.putVar(&velocityHistoryZ[0]);
+
+//     nc_charge.putVar(&chargeHistory[0]);
+// #endif
+//     ncFile_hist.close();
+//   }
+//     if( spectroscopy > 0 )
+//     {
+//     // Write netCDF output for density data
+//     netCDF::NcFile ncFile("output/spec.nc", netCDF::NcFile::replace);
+//     netCDF::NcDim nc_nBins = ncFile.addDim("nBins", nBins + 1);
+//     netCDF::NcDim nc_nR = ncFile.addDim("nR", net_nX);
+//     netCDF::NcDim nc_nY;
+//     if( spectroscopy > 2 )
+//     {
+//     nc_nY = ncFile.addDim("nY", net_nY);
+//     }
+
+//     netCDF::NcDim nc_nZ = ncFile.addDim("nZ", net_nZ);
+//     vector<netCDF::NcDim> dims;
+//     dims.push_back(nc_nBins);
+//     dims.push_back(nc_nZ);
+
+//     if( spectroscopy > 2 )
+//     {
+//     dims.push_back(nc_nY);
+//     }
+
+//     dims.push_back(nc_nR);
+
+//     netCDF::NcVar nc_n = ncFile.addVar("n", netcdf_precision, dims);
+//     netCDF::NcVar nc_gridR = ncFile.addVar("gridR", netcdf_precision, nc_nR);
+//     netCDF::NcVar nc_gridZ = ncFile.addVar("gridZ", netcdf_precision, nc_nZ);
+//     nc_gridR.putVar(&gridX_bins[0]);
+//     nc_gridZ.putVar(&gridZ_bins[0]);
+//     if( spectroscopy > 2 )
+//     {
+//     netCDF::NcVar nc_gridY = ncFile.addVar("gridY", netcdf_precision, nc_nY);
+//     nc_gridY.putVar(&gridY_bins[0]);
+//     }
+
+// #if USE_MPI > 0
+//     nc_n.putVar(&net_BinsTotal[0]);
+// #else
+//     nc_n.putVar(&net_Bins[0]);
+// #endif
+//     ncFile.close();
+//     }
+// #ifdef __CUDACC__
+//     cudaDeviceSynchronize();
+// #endif
+// #if USE_MPI > 0
+// #endif
+// #if USE_MPI > 0
+//   }
+// #endif
+// #ifdef __CUDACC__
+//   cudaError_t err = cudaDeviceReset();
+// // cudaProfilerStop();
+// #endif
+//   if (world_rank == 0) {
+//     auto gitr_finish_clock = gitr_time::now();
+//     std::chrono::duration<gitr_precision> fstotal = gitr_finish_clock - gitr_start_clock;
+//     printf("Total runtime for GITR is %6.3f (secs) \n", fstotal.count());
+//   }
+// #if USE_MPI > 0
+//   // Finalize the MPI environment.
+//   MPI_Barrier(MPI_COMM_WORLD);
+//   MPI_Finalize();
+// #endif
   return 0;
 }
 
