@@ -14,7 +14,8 @@
     Surfaces * _surfaces,
     int flux_ea_,
     int use_3d_geom_,
-    int cylsymm_ ) :
+    int cylsymm_,
+    int nspecies_) :
                              particles(_particles),
                              dt(_dt),
                              nLines(_nLines),
@@ -23,7 +24,8 @@
                              state(_state),
                              flux_ea( flux_ea_ ),
                              use_3d_geom( use_3d_geom_ ),
-                             cylsymm( cylsymm_ )
+                             cylsymm( cylsymm_ ),
+                              nspecies( nspecies_ )
                              { }
 
 CUDA_CALLABLE_MEMBER_DEVICE
@@ -108,6 +110,7 @@ void reflection::operator()(std::size_t indx) const {
     particleTrackVector[1] = particleTrackVector[1] / norm_part;
     particleTrackVector[2] = particleTrackVector[2] / norm_part;
 
+    int species_indx = particles->species[indx];
     partDotNormal = vectorDotProduct(particleTrackVector, surfaceNormalVector);
     thetaImpact = std::acos(partDotNormal);
     if (thetaImpact > 3.14159265359 * 0.5) {
@@ -188,14 +191,17 @@ void reflection::operator()(std::size_t indx) const {
         {
 
         #if USE_CUDA > 0
-                atomicAdd1(&surfaces->grossDeposition[surfaceHit],weight*(1.0-R0));
-                atomicAdd1(&surfaces->grossErosion[surfaceHit],weight*Y0);
+                atomicAdd1(&surfaces->grossDeposition[surfaceHit + species_indx],weight*(1.0-R0));
+                atomicAdd1(&surfaces->grossErosion[surfaceHit + species_indx ],weight*Y0);
         #else
                 #pragma omp atomic
                 printf("Charge of the particle hitting surface %d is %g\n", surfaceHit, particles->Z[indx]);
-                surfaces->grossDeposition[surfaceHit] += ( weight*(1.0-R0) );
+                int species_indx = particles->species[indx];
+                surfaces->grossDeposition[surfaceHit + species_indx ] += ( weight*(1.0-R0) );
+                // surfaces->grossDeposition[surfaceHit] += ( weight*(1.0-R0) );
                 #pragma omp atomic
-                surfaces->grossErosion[surfaceHit] += ( weight * Y0 );
+                // surfaces->grossErosion[surfaceHit] += ( weight * Y0 );
+                surfaces->grossErosion[surfaceHit + species_indx] += ( weight * Y0 );
         #endif
         }
       }
@@ -225,6 +231,9 @@ void reflection::operator()(std::size_t indx) const {
             particles->Z[indx] =  boundaryVector[wallHit].Z;
             particles->amu[indx] =  mass;
             particles->weight[indx] =  newWeight;
+            // set species type: nspecies
+            particles->species[indx] =  nspecies;
+
             // Transform velocity based on surface
             boundaryVector[wallHit].transformToSurface(vSampled, particles->y[indx], 
                                                         particles->x[indx], use_3d_geom, 
@@ -259,7 +268,7 @@ void reflection::operator()(std::size_t indx) const {
         if(surface > 0)
         {
         #if USE_CUDA > 0
-          atomicAdd1(&surfaces->grossDeposition[surfaceHit],weight*(1.0-R0));
+          atomicAdd1(&surfaces->grossDeposition[surfaceHit + species_indx ],weight*(1.0-R0));
           atomicAdd1(&surfaces->grossErosion[surfaceHit],weight*Y0);
           atomicAdd1(&surfaces->aveSputtYld[surfaceHit],Y0);
           if(weight > 0.0)
@@ -268,11 +277,11 @@ void reflection::operator()(std::size_t indx) const {
           }
         #else
           #pragma omp atomic
-          surfaces->grossDeposition[surfaceHit] = surfaces->grossDeposition[surfaceHit]+weight*(1.0-R0);
+          surfaces->grossDeposition[surfaceHit + species_indx ] = surfaces->grossDeposition[surfaceHit + species_indx ]+weight*(1.0-R0);
           #pragma omp atomic
-          surfaces->grossErosion[surfaceHit] = surfaces->grossErosion[surfaceHit] + weight*Y0;
-          surfaces->aveSputtYld[surfaceHit] = surfaces->aveSputtYld[surfaceHit] + Y0;
-          surfaces->sputtYldCount[surfaceHit] = surfaces->sputtYldCount[surfaceHit] + 1;
+          surfaces->grossErosion[surfaceHit + species_indx ] = surfaces->grossErosion[surfaceHit + species_indx] + weight*Y0;
+          surfaces->aveSputtYld[surfaceHit + species_indx ] = surfaces->aveSputtYld[surfaceHit + species_indx] + Y0;
+          surfaces->sputtYldCount[surfaceHit + species_indx] = surfaces->sputtYldCount[surfaceHit + species_indx] + 1;
         #endif
         }
       }
@@ -287,7 +296,7 @@ void reflection::operator()(std::size_t indx) const {
                 atomicAdd1(&surfaces->grossDeposition[surfaceHit],weight);
         #else
                 #pragma omp atomic
-                surfaces->grossDeposition[surfaceHit] = surfaces->grossDeposition[surfaceHit]+weight;
+                surfaces->grossDeposition[surfaceHit + species_indx] = surfaces->grossDeposition[surfaceHit + species_indx]+weight;
         #endif
 	    }
     }
@@ -299,10 +308,10 @@ void reflection::operator()(std::size_t indx) const {
       if(surface > 0)
       {
       #if USE_CUDA > 0
-              atomicAdd1(&surfaces->grossDeposition[surfaceHit],weight*R0);
-              atomicAdd1(&surfaces->grossDeposition[surfaceHit],-weight*Y0);
+              atomicAdd1(&surfaces->grossDeposition[surfaceHit + species_indx],weight*R0);
+              atomicAdd1(&surfaces->grossDeposition[surfaceHit + species_indx],-weight*Y0);
       #else
-              surfaces->grossDeposition[surfaceHit] = surfaces->grossDeposition[surfaceHit]+weight;
+              surfaces->grossDeposition[surfaceHit + species_indx ] = surfaces->grossDeposition[surfaceHit + species_indx ]+weight;
       #endif
 		  }
     }
@@ -310,11 +319,11 @@ void reflection::operator()(std::size_t indx) const {
     if(surface)
     {
     #if USE_CUDA > 0
-        atomicAdd1(&surfaces->sumWeightStrike[surfaceHit],weight);
-        atomicAdd1(&surfaces->sumParticlesStrike[surfaceHit],1.0);
+        atomicAdd1(&surfaces->sumWeightStrike[surfaceHit + species_indx ],weight);
+        atomicAdd1(&surfaces->sumParticlesStrike[surfaceHit + species_indx ],1.0);
     #else
-        surfaces->sumWeightStrike[surfaceHit] =surfaces->sumWeightStrike[surfaceHit] +weight;
-        surfaces->sumParticlesStrike[surfaceHit] = surfaces->sumParticlesStrike[surfaceHit]+1;
+        surfaces->sumWeightStrike[surfaceHit + species_indx ] =surfaces->sumWeightStrike[surfaceHit + species_indx ] +weight;
+        surfaces->sumParticlesStrike[surfaceHit + species_indx ] = surfaces->sumParticlesStrike[surfaceHit + species_indx ]+1;
     #endif
     if( flux_ea > 0 )
     {

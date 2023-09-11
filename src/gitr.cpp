@@ -158,6 +158,7 @@ int main(int argc, char **argv, char **envp) {
 
   // get sheath model type
   int sheath_model_type = use.get< int >( use::sheath_model_type );
+  int nspecies = use.get< int >( use::nspecies );
 
 
   // Set default processes per node to 1
@@ -438,20 +439,21 @@ int main(int argc, char **argv, char **envp) {
   MPI_Barrier(MPI_COMM_WORLD);
 #endif
   }
-  auto surfaces = new Surfaces(nSurfaces, nEdist, nAdist);
+  auto surfaces = new Surfaces(nSurfaces, nspecies, nEdist, nAdist);
   surfaces->setSurface(nEdist, E0dist, Edist, nAdist, A0dist, Adist);
 
   //#if USE_MPI > 0
   // Arrays used for reduction at end of sim
-  sim::Array<gitr_precision> grossDeposition(nSurfaces, 0.0);
-  sim::Array<gitr_precision> grossErosion(nSurfaces, 0.0);
-  sim::Array<gitr_precision> sumWeightStrike(nSurfaces, 0.0);
-  sim::Array<gitr_precision> energyDistribution(nSurfaces * nEdist * nAdist, 0.0);
-  sim::Array<gitr_precision> reflDistribution(nSurfaces * nEdist * nAdist, 0.0);
-  sim::Array<gitr_precision> sputtDistribution(nSurfaces * nEdist * nAdist, 0.0);
-  sim::Array<gitr_precision> aveSputtYld(nSurfaces, 0.0);
-  sim::Array<int> sputtYldCount(nSurfaces, 0);
-  sim::Array<int> sumParticlesStrike(nSurfaces, 0);
+  sim::Array<gitr_precision> grossDeposition(nSurfaces * nspecies, 0.0);
+  sim::Array<gitr_precision> grossErosion(nSurfaces * nspecies, 0.0);
+  sim::Array<gitr_precision> sumWeightStrike(nSurfaces * nspecies, 0.0);
+  sim::Array<gitr_precision> energyDistribution(nSurfaces * nspecies * nEdist * nAdist, 0.0);
+  sim::Array<gitr_precision> reflDistribution(nSurfaces * nspecies * nEdist * nAdist, 0.0);
+  sim::Array<gitr_precision> sputtDistribution(nSurfaces * nspecies * nEdist * nAdist, 0.0);
+  sim::Array<gitr_precision> aveSputtYld(nSurfaces * nspecies, 0.0);
+  sim::Array<int> sputtYldCount(nSurfaces * nspecies, 0);
+  sim::Array<int> sumParticlesStrike(nSurfaces * nspecies, 0);
+
 
   int nHashes = 1;
   int nR_closeGeomTotal = 1;
@@ -1293,7 +1295,7 @@ if( GENERATE_LC > 0 )
   }
 
   // dummy surfaces for Lcs calculation (geometry_check)
-  auto dummy_surfaces = new Surfaces(1, 1, 1);
+  auto dummy_surfaces = new Surfaces(1, 1, 1, 1);
   dummy_surfaces->setSurface(1, 1, 1, 1, 1, 1);
 
   typedef std::chrono::high_resolution_clock Time_trace;
@@ -2808,7 +2810,7 @@ if( presheath_interp == 1 )
       bfieldGridr.data(), &bfieldGridz.front(), &br.front(), &bz.front(),
       &by.front(), cylsymm );
 
-  reflection reflection0( particleArray, dt, &state1.front(), nLines, &boundaries[0], surfaces, flux_ea, use_3d_geom, cylsymm );
+  reflection reflection0( particleArray, dt, &state1.front(), nLines, &boundaries[0], surfaces, flux_ea, use_3d_geom, cylsymm, nspecies);
 
   history history0(particleArray, dev_tt, nT, subSampleFac, nP,
                    &positionHistoryX.front(), &positionHistoryY.front(),
@@ -3506,6 +3508,8 @@ if( presheath_interp == 1 )
     // add mass and Z
     netCDF::NcVar nc_mass0 = ncFile0.addVar("amu", netcdf_precision, dims0);
     netCDF::NcVar nc_Z0 = ncFile0.addVar("Z", netcdf_precision, dims0);
+    // species type
+    netCDF::NcVar nc_species0 = ncFile0.addVar("species", netCDF::ncInt, dims0);
 #if USE_MPI > 0
     nc_x0.putVar(&xGather[0]);
     nc_y0.putVar(&yGather[0]);
@@ -3538,10 +3542,13 @@ if( presheath_interp == 1 )
   nc_dt0.putVar(&particleArray->dt[0]);
   nc_mass0.putVar(&particleArray->amu[0]);
   nc_Z0.putVar(&particleArray->Z[0]);
+  nc_species0.putVar(&particleArray->species[0]);
 #endif
     ncFile0.close();
   if( surface_model > 0 || flux_ea > 0 )
   {
+//// FIXME -- dump surface file --> fix flattening arrays
+
 #if USE_MPI > 0
     std::vector<int> surfaceNumbers(nSurfaces, 0);
     int srf = 0;

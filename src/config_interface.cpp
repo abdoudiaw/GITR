@@ -141,6 +141,7 @@ use::use( class libconfig_string_query const &query,
   lookup[ use::adaptive_dt ] = "USE_ADAPTIVE_DT";
   lookup[ use::surface_potential ] = "USE_SURFACE_POTENTIAL";
   lookup[ use::sheath_model_type ] = "SHEATH_MODEL_TYPE";
+    lookup[ use::nspecies ] = "NSPECIES";
 }
 
 config_module_base::config_module_base( class libconfig_string_query const &query,

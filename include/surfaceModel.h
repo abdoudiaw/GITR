@@ -16,6 +16,7 @@
 #include "boris.h"
 #include "spectroscopy.h"
 
+
 #if USE_OPENMP == 1
 #include "omp.h"
 #endif
@@ -47,6 +48,7 @@ struct reflection {
     int flux_ea;
     int use_3d_geom;
     int cylsymm;
+    int nspecies;
 
     reflection(Particles* _particles, double _dt,
 #if __CUDACC__
@@ -58,7 +60,8 @@ struct reflection {
             Surfaces * _surfaces,
     int flux_ea_,
     int use_3d_geom_,
-    int cylsymm_ );
+    int cylsymm_ ,
+        int nspecies_);
 
 CUDA_CALLABLE_MEMBER_DEVICE
 void operator()(std::size_t indx) const;
